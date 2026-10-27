@@ -24,19 +24,19 @@ import {
   Sparkles
 } from 'lucide-react';
 
-// นำเข้ารูปโลโก้ T-TEX (ปรับ path ตามที่ท่านเก็บไฟล์จริง เช่น './assets/logo.png')
 import logoImg from './assets/T-REX Project YE.png';
 
 export default function App() {
-  const [lang, setLang] = useState('EN');
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // --- GLOBAL STATE MANAGEMENT ---
+  const [lang, setLang] = useState('EN'); // 'TH' | 'EN'
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | floors | inspections | records | documents | ai | handover
   const [selectedFloor, setSelectedFloor] = useState('8');
   const [selectedRecordRoom, setSelectedRecordRoom] = useState('801');
-  const [aiTab, setAiTab] = useState('photo');
+  const [aiTab, setAiTab] = useState('photo'); // photo | voice | summary
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  // Form & AI States
+  // Form State for Inspection Submission
   const [formFloor, setFormFloor] = useState('');
   const [formRoom, setFormRoom] = useState('');
   const [formCategory, setFormCategory] = useState('');
@@ -45,11 +45,21 @@ export default function App() {
   const [formStatus, setFormStatus] = useState('Ready For Inspection');
   const [formComments, setFormComments] = useState('');
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
+  const [uploadedPdf, setUploadedPdf] = useState(null);
+  const [uploadedRi, setUploadedRi] = useState(null);
   const [aiValidationResult, setAiValidationResult] = useState(null);
+
+  // AI Voice Recording State
   const [isRecording, setIsRecording] = useState(false);
   const [voiceText, setVoiceText] = useState('');
+
+  // Documents Center Filters
+  const [docFilterFloor, setDocFilterFloor] = useState('All');
+  const [docFilterTrade, setDocFilterTrade] = useState('All');
+  const [docSearchQuery, setDocSearchQuery] = useState('');
   const [previewDoc, setPreviewDoc] = useState(null);
 
+  // --- BILINGUAL DICTIONARY ---
   const dict = {
     TH: {
       platformTitle: "T-TEX Platform",
@@ -81,6 +91,7 @@ export default function App() {
     }
   };
 
+  // --- MOCK DATA ---
   const floorSummaryData = [
     { floor: 'Floor 1', passed: 3, failed: 0, ready: 2, gray: 2, total: 7, status: 'Pending' },
     { floor: 'Floor 2', passed: 5, failed: 0, ready: 3, gray: 3, total: 11, status: 'Pending' },
@@ -123,6 +134,9 @@ export default function App() {
     { name: 'RI-802-Plumbing.pdf', type: 'RI', floor: 'Floor 8', room: 'Room 802', date: '2024-10-21' },
     { name: 'Final-Inspection-Report-801.pdf', type: 'Report', floor: 'Floor 8', room: 'Room 801', date: '2024-12-18' },
     { name: 'Final-Inspection-Report-803.pdf', type: 'Report', floor: 'Floor 8', room: 'Room 803', date: '2024-12-18' },
+    { name: 'RI-601-Pre-Ceiling-MEP.pdf', type: 'RI', floor: 'Floor 6', room: 'Room 601', date: '2024-11-05' },
+    { name: 'RI-401-Suite-Architecture.pdf', type: 'RI', floor: 'Floor 4', room: 'Room 401', date: '2024-11-20' },
+    { name: 'Defect-Report-306-Plumbing.pdf', type: 'Defect', floor: 'Floor 3', room: 'Room 306', date: '2024-12-18' },
   ];
 
   const handlePhotoUpload = (e) => {
@@ -137,17 +151,29 @@ export default function App() {
     }
   };
 
+  const handleVoiceRecordToggle = () => {
+    if (!isRecording) {
+      setIsRecording(true);
+      setVoiceText('Recording audio...');
+      setTimeout(() => {
+        setVoiceText('พบข้อบกพร่องงานท่อน้ำบริเวณห้อง 801 วาล์วผสมยังไม่ได้ทำการติดตั้ง');
+        setIsRecording(false);
+      }, 3000);
+    } else {
+      setIsRecording(false);
+    }
+  };
+
   const isFormComplete = formFloor && formRoom && formCategory && formDate && formInspector;
 
   return (
     <div className="min-h-screen bg-[#F3F4F6] font-sans text-slate-800 flex">
       
-      {/* LEFT SIDEBAR NAVIGATION */}
+      {/* ---------------- SIDEBAR ---------------- */}
       <aside className="w-64 bg-[#0B132B] text-slate-300 flex flex-col justify-between flex-shrink-0 min-h-screen select-none">
         <div>
-          {/* Logo & Title (Updated to T-TEX with custom Logo) */}
           <div className="p-4 flex items-center gap-3 border-b border-slate-800/80">
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-black flex items-center justify-center border border-slate-700 shadow-md">
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-black flex items-center justify-center border border-slate-700 shadow-md flex-shrink-0">
               <img src={logoImg} alt="T-TEX Logo" className="w-full h-full object-cover" />
             </div>
             <div>
@@ -156,13 +182,11 @@ export default function App() {
             </div>
           </div>
 
-          {/* Active Project Box */}
           <div className="p-3 mx-3 my-4 bg-[#1C2541] rounded-xl border border-slate-700/50">
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Active Project</p>
             <p className="text-xs font-bold text-white mt-0.5 truncate">Boutique BKK Sukhumvit 5</p>
           </div>
 
-          {/* Navigation Links */}
           <nav className="px-3 space-y-1 text-xs font-medium">
             {[
               { id: 'dashboard', label: dict[lang].menu.dashboard, icon: LayoutDashboard },
@@ -194,16 +218,13 @@ export default function App() {
                   {tab.isMain && (
                     <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ml-1">Main</span>
                   )}
-                  {isActive && !tab.isMain && (
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  )}
+                  {isActive && !tab.isMain && <ChevronRight className="w-3.5 h-3.5" />}
                 </button>
               );
             })}
           </nav>
         </div>
 
-        {/* User Profile Footer */}
         <div className="p-3 border-t border-slate-800/80 flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs flex-shrink-0">
             <User className="w-4 h-4" />
@@ -215,10 +236,10 @@ export default function App() {
         </div>
       </aside>
 
-      {/* RIGHT MAIN CONTENT CONTAINER */}
+      {/* ---------------- MAIN CONTAINER ---------------- */}
       <div className="flex-1 flex flex-col min-w-0">
         
-        {/* TOP HEADER BAR */}
+        {/* HEADER */}
         <header className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center sticky top-0 z-40 shadow-sm">
           <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
             <span>Boutique Bangkok Sukhumvit 5</span>
@@ -231,22 +252,19 @@ export default function App() {
               <button onClick={() => setLang('TH')} className={`px-2.5 py-1 rounded-md transition ${lang === 'TH' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>TH</button>
               <button onClick={() => setLang('EN')} className={`px-2.5 py-1 rounded-md transition ${lang === 'EN' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500'}`}>EN</button>
             </div>
-
-            <div className="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center cursor-pointer shadow-sm">
-              SP
-            </div>
+            <div className="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center cursor-pointer shadow-sm">SP</div>
           </div>
         </header>
 
-        {/* MAIN BODY CONTENT */}
+        {/* CONTENT */}
         <main className="p-6 space-y-6 flex-1 overflow-y-auto">
           
-          {/* DASHBOARD */}
+          {/* 1. DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6 max-w-7xl mx-auto">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-black text-slate-900">Dashboard (T-TEX)</h2>
+                  <h2 className="text-2xl font-black text-slate-900">Dashboard</h2>
                   <p className="text-xs text-slate-500">Boutique Bangkok Sukhumvit 5 · Tracking & Reporting Expert System</p>
                 </div>
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-700">
@@ -255,38 +273,120 @@ export default function App() {
                 </div>
               </div>
 
-              {/* KPI Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-500">Total Rooms</p>
-                  <p className="text-3xl font-black text-slate-800 mt-1">174</p>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm"><p className="text-xs text-slate-500">Total Rooms</p><p className="text-3xl font-black text-slate-800 mt-1">174</p></div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm"><p className="text-xs text-slate-500">Passed Rooms</p><p className="text-3xl font-black text-emerald-600 mt-1">75</p></div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-rose-500 shadow-sm"><p className="text-xs text-slate-500">Failed Rooms</p><p className="text-3xl font-black text-rose-600 mt-1">6</p></div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-blue-500 shadow-sm"><p className="text-xs text-slate-500">Ready For Inspection</p><p className="text-3xl font-black text-blue-600 mt-1">44</p></div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm"><p className="text-xs text-slate-500">Not Submitted</p><p className="text-3xl font-black text-slate-700 mt-1">49</p></div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. FLOOR STATUS */}
+          {activeTab === 'floors' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              <h2 className="text-xl font-bold text-slate-900">Floor Status</h2>
+              <div className="grid lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-3 bg-white rounded-xl border p-3 space-y-1">
+                  <div className="p-2 text-xs font-bold text-slate-400 uppercase">Select Floor</div>
+                  {['1','2','3','4','5','6','7','8'].map(f => (
+                    <button key={f} onClick={() => setSelectedFloor(f)} className={`w-full p-2.5 text-left rounded text-xs font-bold ${selectedFloor === f ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-700'}`}>Floor {f}</button>
+                  ))}
                 </div>
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-500">Passed Rooms</p>
-                  <p className="text-3xl font-black text-emerald-600 mt-1">75</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-rose-500 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-500">Failed Rooms</p>
-                  <p className="text-3xl font-black text-rose-600 mt-1">6</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-blue-500 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-500">Ready For Inspection</p>
-                  <p className="text-3xl font-black text-blue-600 mt-1">44</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm">
-                  <p className="text-xs font-semibold text-slate-500">Not Submitted</p>
-                  <p className="text-3xl font-black text-slate-700 mt-1">49</p>
+                <div className="lg:col-span-9 bg-white p-5 rounded-xl border shadow-sm space-y-4">
+                  <h3 className="font-bold text-slate-800">Floor {selectedFloor} (22 rooms)</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                    {roomsFloor8.map(r => {
+                      let bg = 'bg-slate-200 text-slate-700';
+                      if (r.status === 'Failed') bg = 'bg-rose-500 text-white';
+                      if (r.status === 'Ready') bg = 'bg-blue-500 text-white';
+                      if (r.status === 'Passed') bg = 'bg-emerald-500 text-white';
+                      return (
+                        <div key={r.id} onClick={() => { setSelectedRecordRoom(r.id); setActiveTab('records'); }} className={`p-3 rounded-xl border shadow-xs cursor-pointer hover:scale-105 transition ${bg}`}>
+                          <span className="font-black text-base">{r.id}</span>
+                          <span className="text-[10px] block opacity-90">{r.type}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Other tabs fallback view */}
-          {activeTab !== 'dashboard' && (
-            <div className="bg-white p-8 rounded-xl border text-center space-y-3 max-w-2xl mx-auto my-12">
-              <Sparkles className="w-10 h-10 text-blue-600 mx-auto" />
-              <h3 className="font-bold text-lg capitalize">{activeTab} Module Active (T-TEX)</h3>
-              <p className="text-xs text-slate-500">Tracking Reporting Expert System backend connected.</p>
+          {/* 3. ROOM INSPECTIONS (SUBMIT) */}
+          {activeTab === 'inspections' && (
+            <div className="space-y-6 max-w-3xl mx-auto bg-white p-6 rounded-xl border shadow-sm">
+              <h2 className="text-xl font-bold text-slate-900">Submit Inspection</h2>
+              <div className="grid md:grid-cols-2 gap-4 text-xs">
+                <div><label className="font-bold">Floor *</label><select value={formFloor} onChange={e => setFormFloor(e.target.value)} className="w-full border rounded p-2.5 mt-1 bg-slate-50"><option value="">Select...</option>{[1,2,3,4,5,6,7,8].map(f=><option key={f} value={f}>Floor {f}</option>)}</select></div>
+                <div><label className="font-bold">Room Number *</label><select value={formRoom} onChange={e => setFormRoom(e.target.value)} className="w-full border rounded p-2.5 mt-1 bg-slate-50"><option value="">Select...</option>{['801','802','803'].map(r=><option key={r} value={r}>Room {r}</option>)}</select></div>
+                <div><label className="font-bold">Inspection Category *</label><select value={formCategory} onChange={e => setFormCategory(e.target.value)} className="w-full border rounded p-2.5 mt-1 bg-slate-50"><option value="">Select...</option><option value="Architecture">Architecture</option></select></div>
+                <div><label className="font-bold">Inspection Date *</label><input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className="w-full border rounded p-2.5 mt-1 bg-slate-50" /></div>
+              </div>
+              <label className="border-2 border-dashed border-blue-300 bg-blue-50/50 p-6 rounded-xl block text-center cursor-pointer hover:bg-blue-50">
+                <Camera className="w-6 h-6 mx-auto text-blue-600 mb-1" />
+                <span className="text-xs font-bold text-blue-600">Add Photos *</span>
+                <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+              </label>
+              {aiValidationResult && <div className="p-3 bg-emerald-50 text-emerald-800 text-xs rounded font-bold">{aiValidationResult.message}</div>}
+              <button disabled={!isFormComplete} className={`w-full py-2.5 rounded text-xs font-bold text-white ${isFormComplete ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-300 cursor-not-allowed'}`}>Submit Inspection</button>
+            </div>
+          )}
+
+          {/* 4. INSPECTION RECORDS */}
+          {activeTab === 'records' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              <h2 className="text-xl font-bold text-slate-900">Inspection Records</h2>
+              <div className="bg-white p-6 rounded-xl border shadow-sm">
+                <h3 className="font-bold text-lg mb-2">Room {selectedRecordRoom} — Timeline</h3>
+                <div className="space-y-2 text-xs">
+                  {['Wall Plastering', 'Primer Coat', 'Finish Paint — Coat 1', 'Bathroom Tiling'].map((task, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded border flex justify-between items-center">
+                      <span className="font-bold text-slate-800">{task}</span>
+                      <span className="text-emerald-600 font-bold">Passed</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 5. DOCUMENTS */}
+          {activeTab === 'documents' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              <h2 className="text-xl font-bold text-slate-900">Document Center</h2>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {documentsList.map((doc, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded-xl border shadow-xs flex justify-between items-center text-xs">
+                    <div><p className="font-bold text-slate-800">{doc.name}</p><p className="text-[10px] text-slate-400">{doc.floor} · {doc.room}</p></div>
+                    <button onClick={() => setPreviewDoc(doc)} className="text-blue-600 font-bold flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> Preview</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 6. AI ASSISTANT */}
+          {activeTab === 'ai' && (
+            <div className="space-y-6 max-w-3xl mx-auto bg-white p-6 rounded-xl border shadow-sm text-center">
+              <Bot className="w-10 h-10 text-blue-600 mx-auto" />
+              <h2 className="text-xl font-bold">AI Inspection Assistant</h2>
+              <p className="text-xs text-slate-500">Upload photos or use voice notes for automated checks.</p>
+            </div>
+          )}
+
+          {/* 7. HANDOVER DASHBOARD */}
+          {activeTab === 'handover' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              <h2 className="text-xl font-bold text-slate-900">Handover Dashboard</h2>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="bg-white p-4 rounded-xl border border-l-4 border-l-emerald-500 shadow-sm"><p className="text-xs text-slate-500">Ready</p><p className="text-2xl font-black text-emerald-600">75</p></div>
+                <div className="bg-white p-4 rounded-xl border border-l-4 border-l-blue-500 shadow-sm"><p className="text-xs text-slate-500">Pending</p><p className="text-2xl font-black text-blue-600">93</p></div>
+                <div className="bg-white p-4 rounded-xl border border-l-4 border-l-rose-500 shadow-sm"><p className="text-xs text-slate-500">Failed</p><p className="text-2xl font-black text-rose-600">6</p></div>
+                <div className="bg-white p-4 rounded-xl border border-l-4 border-l-slate-400 shadow-sm"><p className="text-xs text-slate-500">Total</p><p className="text-2xl font-black text-slate-800">174</p></div>
+              </div>
             </div>
           )}
 
