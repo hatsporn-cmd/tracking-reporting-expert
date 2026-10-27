@@ -129,13 +129,13 @@ const generateRoomsData = () => {
       const roomNo = `${floor}${r < 10 ? '0' + r : r}`;
       const type = roomTypes[(floor + r) % roomTypes.length];
       
-      // Determine pseudo-random completed tasks based on room number
-      const progressFactor = (floor * 27 + r) % 14;
+      // Seed a believable construction sequence: lower floors are further along.
+      const completedTasks = Math.max(0, Math.min(13, Math.round(1 + floor * 1.35 + ((r * 7 + floor * 3) % 7) - 3)));
       const tasksStatus = {};
       TASKS_13.forEach((task, idx) => {
-        if (idx < progressFactor) {
+        if (idx < completedTasks) {
           tasksStatus[task] = 'passed';
-        } else if (idx === progressFactor) {
+        } else if (idx === completedTasks) {
           tasksStatus[task] = (floor + r) % 3 === 0 ? 'defect' : 'inProgress';
         } else {
           tasksStatus[task] = 'pending';
@@ -143,7 +143,7 @@ const generateRoomsData = () => {
       });
 
       let overallStatus = 'inProgress';
-      if (progressFactor === 13) overallStatus = 'ready';
+      if (completedTasks === 13) overallStatus = 'ready';
       else if (Object.values(tasksStatus).includes('defect')) overallStatus = 'defect';
 
       rooms.push({
@@ -152,7 +152,7 @@ const generateRoomsData = () => {
         floor: floor,
         type: type,
         status: overallStatus,
-        progress: Math.round((progressFactor / 13) * 100),
+        progress: Math.round((completedTasks / 13) * 100),
         tasks: tasksStatus,
         lastInspector: "นายธนโชค ซี.",
         lastUpdate: "2026-10-25 14:30",
@@ -343,7 +343,8 @@ export default function App() {
             <DashboardView 
               t={t} 
               stats={stats} 
-              rooms={filteredRooms} 
+              rooms={rooms}
+              visibleRooms={filteredRooms}
               onInspectRoom={(r) => setModalRoom(r)} 
               setSelectedStatusFilter={setSelectedStatusFilter}
             />
@@ -418,7 +419,7 @@ export default function App() {
 // ==========================================
 // MODULE 1: DASHBOARD VIEW
 // ==========================================
-function DashboardView({ t, stats, rooms, onInspectRoom, setSelectedStatusFilter }) {
+function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelectedStatusFilter }) {
   const [chartMode, setChartMode] = useState('completion'); // completion | trade
 
   return (
@@ -511,8 +512,7 @@ function DashboardView({ t, stats, rooms, onInspectRoom, setSelectedStatusFilter
           <div className="space-y-4">
             {[1, 2, 3, 4, 5, 6, 7, 8].map(floor => {
               const floorRooms = rooms.filter(r => r.floor === floor);
-              const readyCount = floorRooms.filter(r => r.status === 'ready').length;
-              const percent = Math.round((readyCount / (floorRooms.length || 1)) * 100);
+              const percent = Math.round(floorRooms.reduce((sum, room) => sum + (room.progress || 0), 0) / (floorRooms.length || 1));
               return (
                 <div key={floor} className="flex items-center gap-4">
                   <span className="w-16 text-xs font-semibold text-slate-300">ชั้น {floor}</span>
@@ -544,7 +544,7 @@ function DashboardView({ t, stats, rooms, onInspectRoom, setSelectedStatusFilter
       <div className="bg-slate-800/70 border border-slate-700/80 rounded-xl overflow-hidden">
         <div className="p-4 border-b border-slate-700/80 flex items-center justify-between">
           <h3 className="font-semibold text-sm text-slate-200">รายชื่อห้องพัก (Room Inspection List)</h3>
-          <span className="text-xs text-slate-400">แสดงผล {rooms.length} ห้อง</span>
+          <span className="text-xs text-slate-400">แสดงผล {visibleRooms.length} ห้อง</span>
         </div>
         <div className="overflow-x-auto max-h-96">
           <table className="w-full text-left border-collapse">
@@ -559,7 +559,7 @@ function DashboardView({ t, stats, rooms, onInspectRoom, setSelectedStatusFilter
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50 text-xs text-slate-300">
-              {rooms.slice(0, 15).map(room => (
+              {visibleRooms.slice(0, 15).map(room => (
                 <tr key={room.id} className="hover:bg-slate-750 transition-colors">
                   <td className="p-3 pl-4 font-bold text-emerald-400">{room.roomNumber}</td>
                   <td className="p-3">{room.type}</td>
