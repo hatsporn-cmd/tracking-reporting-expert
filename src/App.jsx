@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, LayoutDashboard, Grid, ClipboardCheck, History, FolderKanban, 
-  Bot, CheckCircle2, AlertTriangle, Clock, XCircle, Search, Filter, Plus, 
-  Upload, Mic, FileText, Download, Check, Eye, ChevronRight, Languages, 
-  User, Bell, ChevronDown, Sparkles, RefreshCw, X, FileSpreadsheet, FilePdf,
-  TrendingUp, Layers, Camera, AlertCircle, ArrowUpRight, Play, Square, Volume2
+  Bot, CheckCircle2, AlertTriangle, Clock, Search, 
+  Upload, Mic, FileText, Download, Eye, Languages, 
+  Bell, Sparkles, X, FileSpreadsheet,
+  Camera, FileDown as FilePdf
 } from 'lucide-react';
 
 // --- DICTIONARY FOR BILINGUAL SUPPORT ---
@@ -110,6 +110,15 @@ const TASKS_13 = [
   "Ceiling Board", "Main Door", "Bathroom Door", "Shower Screen", "Skirting"
 ];
 
+function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 // Generate Initial Sample Data for 8 Floors x 27 Rooms = 216 Rooms
 const generateRoomsData = () => {
   const rooms = [];
@@ -157,7 +166,14 @@ const generateRoomsData = () => {
 export default function App() {
   const [lang, setLang] = useState('th');
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [rooms, setRooms] = useState(generateRoomsData());
+  const [rooms, setRooms] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('trex-rooms')) || generateRoomsData(); }
+    catch { return generateRoomsData(); }
+  });
+  const [inspectionRecords, setInspectionRecords] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('trex-inspections')) || []; }
+    catch { return []; }
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFloorFilter, setSelectedFloorFilter] = useState('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
@@ -167,6 +183,9 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState(null);
   
   const t = i18n[lang];
+
+  useEffect(() => { localStorage.setItem('trex-rooms', JSON.stringify(rooms)); }, [rooms]);
+  useEffect(() => { localStorage.setItem('trex-inspections', JSON.stringify(inspectionRecords)); }, [inspectionRecords]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -185,7 +204,8 @@ export default function App() {
   // Filtered rooms
   const filteredRooms = useMemo(() => {
     return rooms.filter(room => {
-      const matchSearch = room.roomNumber.includes(searchQuery) || room.type.toLowerCase().includes(searchQuery.toLowerCase());
+      const query = searchQuery.trim().toLowerCase();
+      const matchSearch = room.roomNumber.toLowerCase().includes(query) || room.type.toLowerCase().includes(query);
       const matchFloor = selectedFloorFilter === 'all' || room.floor.toString() === selectedFloorFilter;
       const matchStatus = selectedStatusFilter === 'all' || room.status === selectedStatusFilter;
       return matchSearch && matchFloor && matchStatus;
@@ -340,11 +360,23 @@ export default function App() {
           )}
 
           {activeTab === 'newInspection' && (
-            <RoomInspectionFormView t={t} showToast={showToast} rooms={rooms} />
+            <RoomInspectionFormView t={t} showToast={showToast} rooms={rooms} onSubmitInspection={(record) => {
+              const nextRecords = [record, ...inspectionRecords];
+              setInspectionRecords(nextRecords);
+              setRooms(current => current.map(room => {
+                if (room.roomNumber !== record.roomNumber) return room;
+                const tasks = { ...room.tasks, [record.task]: record.status };
+                const passed = Object.values(tasks).filter(value => value === 'passed').length;
+                const defects = Object.values(tasks).filter(value => value === 'defect').length;
+                return { ...room, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects,
+                  status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: record.date, lastInspector: record.inspector };
+              }));
+              showToast(`บันทึกผลตรวจห้อง ${record.roomNumber} - ${record.task} สำเร็จ`);
+            }} />
           )}
 
           {activeTab === 'inspectionRecords' && (
-            <InspectionRecordsView t={t} rooms={rooms} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
+            <InspectionRecordsView t={t} rooms={rooms} records={inspectionRecords} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
           )}
 
           {activeTab === 'documentCenter' && (
@@ -368,7 +400,12 @@ export default function App() {
           t={t} 
           onClose={() => setModalRoom(null)}
           onSave={(updated) => {
-            setRooms(rooms.map(r => r.id === updated.id ? updated : r));
+            setRooms(current => current.map(r => r.id === updated.id ? {
+              ...updated,
+              progress: Math.round(Object.values(updated.tasks).filter(value => value === 'passed').length / TASKS_13.length * 100),
+              defectsCount: Object.values(updated.tasks).filter(value => value === 'defect').length,
+              lastUpdate: new Date().toLocaleString('th-TH'),
+            } : r));
             showToast(lang === 'th' ? `อัปเดตข้อมูลห้อง ${updated.roomNumber} สำเร็จ` : `Room ${updated.roomNumber} updated successfully`);
             setModalRoom(null);
           }}
@@ -646,7 +683,7 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectR
 // ==========================================
 // MODULE 3: NEW INSPECTION FORM
 // ==========================================
-function RoomInspectionFormView({ t, showToast, rooms }) {
+function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
   const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.roomNumber || '101');
   const [taskName, setTaskName] = useState(TASKS_13[0]);
   const [status, setStatus] = useState('passed');
@@ -683,7 +720,7 @@ function RoomInspectionFormView({ t, showToast, rooms }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    showToast(`บันทึกการตรวจห้อง ${selectedRoom} - ${taskName} สำเร็จแล้ว`);
+    onSubmitInspection({ id: crypto.randomUUID(), roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString('th-TH'), inspector: 'นายธนโชค ซี.', photo: photoPreview });
     setRemarks('');
     setPhotoPreview(null);
     setAiScore(null);
@@ -802,7 +839,7 @@ function RoomInspectionFormView({ t, showToast, rooms }) {
 // ==========================================
 // MODULE 4: 13-TASK INSPECTION RECORDS
 // ==========================================
-function InspectionRecordsView({ t, rooms, onInspectRoom, showToast }) {
+function InspectionRecordsView({ t, rooms, records, onInspectRoom, showToast }) {
   const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '101');
   const activeRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
 
@@ -826,6 +863,12 @@ function InspectionRecordsView({ t, rooms, onInspectRoom, showToast }) {
         </select>
       </div>
 
+      {records.length > 0 && <section className="rounded-xl border border-slate-700 bg-slate-800/70 p-4">
+        <h3 className="mb-3 text-sm font-bold text-emerald-400">บันทึกการตรวจล่าสุด ({records.length})</h3>
+        <div className="space-y-2">{records.slice(0, 8).map(record => <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900/70 p-3 text-xs">
+          <span>ห้อง {record.roomNumber} · {record.task} · {record.status}</span><span className="text-slate-400">{record.date}</span>
+        </div>)}</div>
+      </section>}
       {/* Task Grid Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {TASKS_13.map((task, idx) => {
@@ -849,14 +892,14 @@ function InspectionRecordsView({ t, rooms, onInspectRoom, showToast }) {
 
               <div className="flex items-center justify-between pt-1 border-t border-slate-700/60">
                 <button 
-                  onClick={() => showToast(`แสดงหลักฐานรูปถ่ายสำหรับงาน ${task}`)}
+                  onClick={() => activeRoom.tasks[task] === 'pending' ? showToast('งานนี้ยังไม่มีหลักฐานภาพ') : onInspectRoom(activeRoom)}
                   className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>หลักฐานภาพถ่าย</span>
                 </button>
                 <button 
-                  onClick={() => showToast(`อัปเดตสถานะงาน ${task} เรียบร้อย`)}
+                  onClick={() => onInspectRoom(activeRoom)}
                   className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[10px]"
                 >
                   เปลี่ยนสถานะ
@@ -875,13 +918,28 @@ function InspectionRecordsView({ t, rooms, onInspectRoom, showToast }) {
 // ==========================================
 function DocumentCenterView({ t, showToast }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
-
-  const docs = [
+  const [docs, setDocs] = useState([
     { id: 1, name: "Inspection_Report_Floor_4_Q3.pdf", category: "Inspection Reports", size: "3.4 MB", date: "2026-10-20" },
     { id: 2, name: "Defect_Summary_Boutique_Sukhumvit5.xlsx", category: "Defect Reports", size: "1.2 MB", date: "2026-10-22" },
     { id: 3, name: "RI_Architectural_Specs_V2.pdf", category: "RI Documents", size: "8.9 MB", date: "2026-09-15" },
     { id: 4, name: "Handover_Certificate_Floor_1-2.pdf", category: "Inspection Reports", size: "4.1 MB", date: "2026-10-24" }
-  ];
+  ]);
+  const handleUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setDocs(current => [{ id: crypto.randomUUID(), name: file.name, category: 'Uploaded documents', size: `${(file.size / 1024 / 1024).toFixed(2)} MB`, date: new Date().toISOString().slice(0, 10), file }, ...current]);
+    showToast(`เพิ่มเอกสาร ${file.name} แล้ว`);
+    event.target.value = '';
+  };
+  const handleDownload = async (doc) => {
+    if (doc.file) {
+      const url = URL.createObjectURL(doc.file);
+      const anchor = document.createElement('a'); anchor.href = url; anchor.download = doc.name; anchor.click(); URL.revokeObjectURL(url);
+    } else {
+      downloadFile(`${doc.name}\nหมวดหมู่: ${doc.category}\nวันที่: ${doc.date}\n\nไฟล์ตัวอย่างสำหรับสาธิต`, `${doc.name}.txt`);
+    }
+    showToast(`ดาวน์โหลด ${doc.name} แล้ว`);
+  };
 
   return (
     <div className="space-y-6">
@@ -890,8 +948,9 @@ function DocumentCenterView({ t, showToast }) {
           <h2 className="font-bold text-base text-slate-100">ศูนย์เอกสารโครงการ (Document Hub)</h2>
           <p className="text-xs text-slate-400">จัดเก็บเอกสารการตรวจรับ งานสถาปัตยกรรม และแบบแปลน</p>
         </div>
+        <input id="document-upload" type="file" className="hidden" onChange={handleUpload} />
         <button 
-          onClick={() => showToast("เปิดหน้าต่างอัปโหลดเอกสารใหม่")}
+          onClick={() => document.getElementById('document-upload')?.click()}
           className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2"
         >
           <Upload className="w-4 h-4" />
@@ -920,7 +979,7 @@ function DocumentCenterView({ t, showToast }) {
                   <Eye className="w-3.5 h-3.5" />
                 </button>
                 <button 
-                  onClick={() => showToast(`กำลังดาวน์โหลด ${doc.name}`)}
+                  onClick={() => handleDownload(doc)}
                   className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -953,7 +1012,7 @@ function DocumentCenterView({ t, showToast }) {
               </button>
               <button 
                 onClick={() => {
-                  showToast(`กำลังดาวน์โหลด ${selectedDoc.name}`);
+                  handleDownload(selectedDoc);
                   setSelectedDoc(null);
                 }}
                 className="px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg"
@@ -971,7 +1030,7 @@ function DocumentCenterView({ t, showToast }) {
 // ==========================================
 // MODULE 6: AI WORKBENCH ASSISTANT
 // ==========================================
-function AIAssistantView({ t, showToast }) {
+function AIAssistantView({ showToast }) {
   const [aiReport, setAiReport] = useState(null);
 
   const generateReport = () => {
@@ -1034,7 +1093,13 @@ function AIAssistantView({ t, showToast }) {
 // ==========================================
 // MODULE 7: HANDOVER HEATMAP DASHBOARD
 // ==========================================
-function HandoverDashboardView({ t, rooms, onInspectRoom, showToast }) {
+function HandoverDashboardView({ rooms, onInspectRoom, showToast }) {
+  const exportCsv = () => {
+    const rows = [['Room', 'Floor', 'Type', 'Status', 'Progress', 'Defects'], ...rooms.map(room => [room.roomNumber, room.floor, room.type, room.status, `${room.progress}%`, room.defectsCount])];
+    downloadFile(`\uFEFF${rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')}`, 'trex-handover-report.csv', 'text/csv;charset=utf-8');
+    showToast('ดาวน์โหลดรายงาน Excel (CSV) แล้ว');
+  };
+  const printReport = () => { window.print(); };
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between bg-slate-800/80 p-4 rounded-xl border border-slate-700">
@@ -1044,14 +1109,14 @@ function HandoverDashboardView({ t, rooms, onInspectRoom, showToast }) {
         </div>
         <div className="flex gap-2">
           <button 
-            onClick={() => showToast("ส่งออกข้อมูล Handover เป็นไฟล์ PDF สำเร็จ")}
+            onClick={printReport}
             className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5"
           >
             <FilePdf className="w-4 h-4 text-red-400" />
             <span>PDF Export</span>
           </button>
           <button 
-            onClick={() => showToast("ส่งออกข้อมูล Handover เป็นไฟล์ Excel สำเร็จ")}
+            onClick={exportCsv}
             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
           >
             <FileSpreadsheet className="w-4 h-4" />
@@ -1065,7 +1130,7 @@ function HandoverDashboardView({ t, rooms, onInspectRoom, showToast }) {
         {[8, 7, 6, 5, 4, 3, 2, 1].map(floor => (
           <div key={floor} className="flex items-center gap-3">
             <span className="w-14 text-xs font-bold text-slate-300">ชั้น {floor}</span>
-            <div className="flex-1 grid grid-cols-27 gap-1">
+            <div className="flex-1 grid grid-cols-[repeat(27,minmax(0,1fr))] gap-1">
               {rooms.filter(r => r.floor === floor).map(room => (
                 <div
                   key={room.id}
@@ -1079,7 +1144,7 @@ function HandoverDashboardView({ t, rooms, onInspectRoom, showToast }) {
                       : 'bg-slate-700 text-slate-300'
                   }`}
                 >
-                  {room.roomNumber.slice(-2)}
+              {room.roomNumber.slice(-2)}
                 </div>
               ))}
             </div>
