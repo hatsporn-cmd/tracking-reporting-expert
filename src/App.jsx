@@ -1,1178 +1,1209 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  LayoutDashboard, 
-  Layers, 
-  ClipboardCheck, 
-  FileText, 
-  FolderTree, 
-  Bot, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  AlertTriangle, 
-  Upload, 
-  Mic, 
-  Building2, 
-  FileCheck, 
-  Bell,
-  ChevronRight,
-  Search,
-  User,
-  FileDown,
-  Eye,
-  Camera,
-  Sparkles
+  Building2, LayoutDashboard, Grid, ClipboardCheck, History, FolderKanban, 
+  Bot, CheckCircle2, AlertTriangle, Clock, XCircle, Search, Filter, Plus, 
+  Upload, Mic, FileText, Download, Check, Eye, ChevronRight, Languages, 
+  User, Bell, ChevronDown, Sparkles, RefreshCw, X, FileSpreadsheet, FilePdf,
+  TrendingUp, Layers, Camera, AlertCircle, ArrowUpRight, Play, Square, Volume2
 } from 'lucide-react';
 
-// นำเข้ารูปโลโก้ T-REX ตามชื่อไฟล์ที่คุณระบุ
-import logoImg from './assets/T-REX Project YE.png';
-
-export default function App() {
-  // --- GLOBAL STATE MANAGEMENT ---
-  const [lang, setLang] = useState('EN'); // 'TH' | 'EN'
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | floors | inspections | records | documents | ai | handover
-  const [selectedFloor, setSelectedFloor] = useState('8');
-  const [selectedRecordRoom, setSelectedRecordRoom] = useState('801');
-  const [aiTab, setAiTab] = useState('photo'); // photo | voice | summary
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-
-  // Form State for Inspection Submission
-  const [formFloor, setFormFloor] = useState('');
-  const [formRoom, setFormRoom] = useState('');
-  const [formCategory, setFormCategory] = useState('');
-  const [formDate, setFormDate] = useState('');
-  const [formInspector, setFormInspector] = useState('');
-  const [formStatus, setFormStatus] = useState('Ready For Inspection');
-  const [formComments, setFormComments] = useState('');
-  const [uploadedPhotos, setUploadedPhotos] = useState([]);
-  const [uploadedPdf, setUploadedPdf] = useState(null);
-  const [uploadedRi, setUploadedRi] = useState(null);
-  const [aiValidationResult, setAiValidationResult] = useState(null);
-
-  // AI Voice Recording State
-  const [isRecording, setIsRecording] = useState(false);
-  const [voiceText, setVoiceText] = useState('');
-
-  // Documents Center Filters
-  const [docFilterFloor, setDocFilterFloor] = useState('All');
-  const [docFilterTrade, setDocFilterTrade] = useState('All');
-  const [docSearchQuery, setDocSearchQuery] = useState('');
-  const [previewDoc, setPreviewDoc] = useState(null);
-
-  // --- BILINGUAL DICTIONARY ---
-  const dict = {
-    TH: {
-      platformTitle: "T-REX Platform",
-      subTitle: "Tracking & Reporting",
-      projectName: "Boutique Bangkok Sukhumvit 5",
-      liveSync: "Live Sync | อัปเดตล่าสุด: เมื่อสักครู่",
-      menu: {
-        dashboard: "Dashboard",
-        floors: "Floor Status",
-        inspections: "Room Inspections",
-        records: "Inspection Records",
-        documents: "Documents",
-        ai: "AI Assistant",
-        handover: "Handover Dashboard"
-      }
+// --- DICTIONARY FOR BILINGUAL SUPPORT ---
+const i18n = {
+  th: {
+    appName: "T-REX Platform",
+    subTitle: "Tracking & Reporting Expert System",
+    projectTitle: "Boutique Bangkok Sukhumvit 5",
+    siteEngineer: "นายธนโชค ซี. (Site Engineer)",
+    nav: {
+      dashboard: "แดชบอร์ดสรุปผล",
+      floorStatus: "สถานะรายชั้น",
+      newInspection: "บันทึกการตรวจงาน",
+      inspectionRecords: "ประวัติการตรวจ 13 งาน",
+      documentCenter: "ศูนย์เอกสารโครงการ",
+      aiAssistant: "AI ผู้ช่วยวิเคราะห์",
+      handover: "สถานะการส่งมอบห้องพัก"
     },
-    EN: {
-      platformTitle: "T-REX Platform",
-      subTitle: "Tracking & Reporting",
-      projectName: "Boutique Bangkok Sukhumvit 5",
-      liveSync: "Live Sync | Last updated: Just now",
-      menu: {
-        dashboard: "Dashboard",
-        floors: "Floor Status",
-        inspections: "Room Inspections",
-        records: "Inspection Records",
-        documents: "Documents",
-        ai: "AI Assistant",
-        handover: "Handover Dashboard"
-      }
+    metrics: {
+      totalRooms: "ห้องพักทั้งหมด",
+      passedRooms: "ผ่านมาตรฐานแล้ว",
+      defectsFound: "พบข้อบกพร่อง (Defects)",
+      pendingInspection: "รอการตรวจเช็ค"
+    },
+    status: {
+      ready: "พร้อมส่งมอบ",
+      inProgress: "กำลังดำเนินการ",
+      defect: "มีข้อบกพร่อง",
+      pending: "รอดำเนินการ",
+      passed: "ผ่านการตรวจ",
+      rejected: "ไม่ผ่าน"
+    },
+    common: {
+      search: "ค้นหาห้องพัก หรือ เอกสาร...",
+      floor: "ชั้น",
+      room: "ห้อง",
+      actions: "การจัดการ",
+      details: "ดูรายละเอียด",
+      edit: "แก้ไขข้อมูล",
+      close: "ปิดหน้าต่าง",
+      save: "บันทึกข้อมูล",
+      export: "ส่งออกรายงาน",
+      filterAll: "ทั้งหมด",
+      selectFloor: "เลือกชั้น",
+      trade: "หมวดหมู่ช่าง",
+      date: "วันที่",
+      inspector: "ผู้ตรวจงาน",
+      confirm: "ยืนยัน"
     }
-  };
+  },
+  en: {
+    appName: "T-REX Platform",
+    subTitle: "Tracking & Reporting Expert System",
+    projectTitle: "Boutique Bangkok Sukhumvit 5",
+    siteEngineer: "Tanachock C. (Site Engineer)",
+    nav: {
+      dashboard: "Executive Dashboard",
+      floorStatus: "Floor Grid Status",
+      newInspection: "Room Inspection Form",
+      inspectionRecords: "13-Task Timeline",
+      documentCenter: "Document Hub",
+      aiAssistant: "AI Workbench",
+      handover: "Handover Heatmap"
+    },
+    metrics: {
+      totalRooms: "Total Rooms",
+      passedRooms: "Passed & Ready",
+      defectsFound: "Active Defects",
+      pendingInspection: "Pending Inspections"
+    },
+    status: {
+      ready: "Ready for Handover",
+      inProgress: "In Progress",
+      defect: "Defect Found",
+      pending: "Pending",
+      passed: "Passed",
+      rejected: "Needs Rework"
+    },
+    common: {
+      search: "Search rooms or documents...",
+      floor: "Floor",
+      room: "Room",
+      actions: "Actions",
+      details: "View Details",
+      edit: "Edit",
+      close: "Close",
+      save: "Save Changes",
+      export: "Export Report",
+      filterAll: "All",
+      selectFloor: "Select Floor",
+      trade: "Trade",
+      date: "Date",
+      inspector: "Inspector",
+      confirm: "Confirm"
+    }
+  }
+};
 
-  // --- MOCK DATA FOR 7 MODULES ---
-  const floorSummaryData = [
-    { floor: 'Floor 1', passed: 3, failed: 0, ready: 2, gray: 2, total: 7, status: 'Pending' },
-    { floor: 'Floor 2', passed: 5, failed: 0, ready: 3, gray: 3, total: 11, status: 'Pending' },
-    { floor: 'Floor 3', passed: 12, failed: 1, ready: 5, gray: 8, total: 26, status: 'Failed' },
-    { floor: 'Floor 4', passed: 11, failed: 1, ready: 7, gray: 8, total: 27, status: 'Failed' },
-    { floor: 'Floor 5', passed: 11, failed: 1, ready: 9, gray: 6, total: 27, status: 'Failed' },
-    { floor: 'Floor 6', passed: 11, failed: 1, ready: 7, gray: 8, total: 27, status: 'Failed' },
-    { floor: 'Floor 7', passed: 12, failed: 1, ready: 5, gray: 9, total: 27, status: 'Failed' },
-    { floor: 'Floor 8', passed: 10, failed: 1, ready: 6, gray: 5, total: 22, status: 'Failed' },
-  ];
+// 13 Standard Construction Tasks
+const TASKS_13 = [
+  "Wall Plastering", "Skim Coat", "Screed", "Primer Paint", 
+  "Finish Paint 1", "Finish Paint 2", "Bathroom Tiling", "Ceiling Frame", 
+  "Ceiling Board", "Main Door", "Bathroom Door", "Shower Screen", "Skirting"
+];
 
-  const roomsFloor8 = [
-    { id: '801', type: 'Type E', status: 'Failed' },
-    { id: '802', type: 'Type E', status: 'Ready' },
-    { id: '803', type: 'Type E', status: 'Passed' },
-    { id: '804', type: 'Type E', status: 'Ready' },
-    { id: '805', type: 'Type E', status: 'Passed' },
-    { id: '806', type: 'Type E', status: 'Not Submitted' },
-    { id: '807', type: 'Type E', status: 'Passed' },
-    { id: '808', type: 'Type E', status: 'Not Submitted' },
-    { id: '809', type: 'Type E', status: 'Ready' },
-    { id: '810', type: 'Type E', status: 'Passed' },
-    { id: '811', type: 'Type E', status: 'Ready' },
-    { id: '812', type: 'Type E', status: 'Passed' },
-    { id: '818', type: 'Type A', status: 'Passed' },
-    { id: '819', type: 'Type S2', status: 'Not Submitted' },
-    { id: '821', type: 'Type D', status: 'Ready' },
-    { id: '822', type: 'Type S1', status: 'Passed' },
-    { id: '824', type: 'Type C', status: 'Passed' },
-    { id: '825', type: 'Type H', status: 'Ready' },
-    { id: '826', type: 'Type A', status: 'Passed' },
-    { id: '827', type: 'Type A', status: 'Not Submitted' },
-    { id: '828', type: 'Type A', status: 'Passed' },
-    { id: '829', type: 'Type A', status: 'Not Submitted' },
-  ];
+// Generate Initial Sample Data for 8 Floors x 27 Rooms = 216 Rooms
+const generateRoomsData = () => {
+  const rooms = [];
+  const roomTypes = ['Deluxe King', 'Executive Suite', 'Standard Twin', 'Corner Suite'];
+  
+  for (let floor = 1; floor <= 8; floor++) {
+    for (let r = 1; r <= 27; r++) {
+      const roomNo = `${floor}${r < 10 ? '0' + r : r}`;
+      const type = roomTypes[(floor + r) % roomTypes.length];
+      
+      // Determine pseudo-random completed tasks based on room number
+      const progressFactor = (floor * 27 + r) % 14;
+      const tasksStatus = {};
+      TASKS_13.forEach((task, idx) => {
+        if (idx < progressFactor) {
+          tasksStatus[task] = 'passed';
+        } else if (idx === progressFactor) {
+          tasksStatus[task] = (floor + r) % 3 === 0 ? 'defect' : 'inProgress';
+        } else {
+          tasksStatus[task] = 'pending';
+        }
+      });
 
-  const documentsList = [
-    { name: 'RI-801-Plumbing-Pre-Ceiling.pdf', type: 'RI', floor: 'Floor 8', room: 'Room 801', date: '2024-10-20' },
-    { name: 'RI-801-Electrical-Pre-Ceiling.pdf', type: 'RI', floor: 'Floor 8', room: 'Room 801', date: '2024-10-22' },
-    { name: 'RI-802-Plumbing.pdf', type: 'RI', floor: 'Floor 8', room: 'Room 802', date: '2024-10-21' },
-    { name: 'Final-Inspection-Report-801.pdf', type: 'Report', floor: 'Floor 8', room: 'Room 801', date: '2024-12-18' },
-    { name: 'Final-Inspection-Report-803.pdf', type: 'Report', floor: 'Floor 8', room: 'Room 803', date: '2024-12-18' },
-    { name: 'RI-601-Pre-Ceiling-MEP.pdf', type: 'RI', floor: 'Floor 6', room: 'Room 601', date: '2024-11-05' },
-    { name: 'RI-401-Suite-Architecture.pdf', type: 'RI', floor: 'Floor 4', room: 'Room 401', date: '2024-11-20' },
-    { name: 'Defect-Report-306-Plumbing.pdf', type: 'Defect', floor: 'Floor 3', room: 'Room 306', date: '2024-12-18' },
-  ];
+      let overallStatus = 'inProgress';
+      if (progressFactor === 13) overallStatus = 'ready';
+      else if (Object.values(tasksStatus).includes('defect')) overallStatus = 'defect';
 
-  const handlePhotoUpload = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      setUploadedPhotos(prev => [...prev, ...files]);
-      setAiValidationResult({
-        status: 'success',
-        message: 'AI Validated: Evidence is clear & high quality',
-        confidence: '96.8%'
+      rooms.push({
+        id: roomNo,
+        roomNumber: roomNo,
+        floor: floor,
+        type: type,
+        status: overallStatus,
+        progress: Math.round((progressFactor / 13) * 100),
+        tasks: tasksStatus,
+        lastInspector: "นายธนโชค ซี.",
+        lastUpdate: "2026-10-25 14:30",
+        defectsCount: Object.values(tasksStatus).filter(s => s === 'defect').length
       });
     }
+  }
+  return rooms;
+};
+
+export default function App() {
+  const [lang, setLang] = useState('th');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [rooms, setRooms] = useState(generateRoomsData());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFloorFilter, setSelectedFloorFilter] = useState('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
+  
+  // Modal States
+  const [modalRoom, setModalRoom] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
+  
+  const t = i18n[lang];
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleVoiceRecordToggle = () => {
-    if (!isRecording) {
-      setIsRecording(true);
-      setVoiceText('Recording audio... (Simulated Thai/English voice recognition)');
-      setTimeout(() => {
-        setVoiceText('พบข้อบกพร่องงานท่อน้ำบริเวณห้อง 801 วาล์วผสมยังไม่ได้ทำการติดตั้ง (Mix Valve missing in Room 801)');
-        setIsRecording(false);
-      }, 3000);
-    } else {
-      setIsRecording(false);
-    }
-  };
+  // KPI Computations
+  const stats = useMemo(() => {
+    const total = rooms.length;
+    const ready = rooms.filter(r => r.status === 'ready').length;
+    const defect = rooms.filter(r => r.status === 'defect').length;
+    const inProgress = rooms.filter(r => r.status === 'inProgress').length;
+    return { total, ready, defect, inProgress };
+  }, [rooms]);
 
-  const isFormComplete = formFloor && formRoom && formCategory && formDate && formInspector;
+  // Filtered rooms
+  const filteredRooms = useMemo(() => {
+    return rooms.filter(room => {
+      const matchSearch = room.roomNumber.includes(searchQuery) || room.type.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchFloor = selectedFloorFilter === 'all' || room.floor.toString() === selectedFloorFilter;
+      const matchStatus = selectedStatusFilter === 'all' || room.status === selectedStatusFilter;
+      return matchSearch && matchFloor && matchStatus;
+    });
+  }, [rooms, searchQuery, selectedFloorFilter, selectedStatusFilter]);
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] font-sans text-slate-800 flex">
-      
-      {/* ---------------------------------------------------- */}
-      {/* LEFT SIDEBAR NAVIGATION                             */}
-      {/* ---------------------------------------------------- */}
-      <aside className="w-64 bg-[#0B132B] text-slate-300 flex flex-col justify-between flex-shrink-0 min-h-screen select-none">
-        <div>
-          {/* Logo & Platform Title */}
-          <div className="p-4 flex items-center gap-3 border-b border-slate-800/80">
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-black flex items-center justify-center border border-slate-700 shadow-md flex-shrink-0">
-              <img src={logoImg} alt="T-REX Logo" className="w-full h-full object-cover" />
-            </div>
-            <div>
-              <h1 className="font-bold text-white text-sm tracking-wide">T-REX Platform</h1>
-              <p className="text-[10px] text-slate-400">Tracking & Reporting</p>
-            </div>
-          </div>
+    <div className="flex h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden">
+      {/* Toast Alert Banner */}
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-emerald-600 text-white px-5 py-3 rounded-lg shadow-2xl border border-emerald-400 animate-bounce">
+          <CheckCircle2 className="w-5 h-5" />
+          <span className="font-medium text-sm">{toastMessage}</span>
+        </div>
+      )}
 
-          {/* Active Project Card */}
-          <div className="p-3 mx-3 my-4 bg-[#1C2541] rounded-xl border border-slate-700/50">
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Active Project</p>
-            <p className="text-xs font-bold text-white mt-0.5 truncate">Boutique BKK Sukhumvit 5</p>
+      {/* --- SIDEBAR --- */}
+      <aside className="w-64 bg-[#0B132B] flex flex-col border-r border-slate-800 flex-shrink-0">
+        {/* Brand Header */}
+        <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
+          <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-400 rounded-xl flex items-center justify-center text-emerald-400 font-extrabold text-xl shadow-inner">
+            🦖
           </div>
-
-          {/* Navigation Items */}
-          <nav className="px-3 space-y-1 text-xs font-medium">
-            {[
-              { id: 'dashboard', label: dict[lang].menu.dashboard, icon: LayoutDashboard },
-              { id: 'floors', label: dict[lang].menu.floors, icon: Layers },
-              { id: 'inspections', label: dict[lang].menu.inspections, icon: ClipboardCheck, isMain: true },
-              { id: 'records', label: dict[lang].menu.records, icon: FileCheck },
-              { id: 'documents', label: dict[lang].menu.documents, icon: FolderTree },
-              { id: 'ai', label: dict[lang].menu.ai, icon: Bot },
-              { id: 'handover', label: dict[lang].menu.handover, icon: CheckCircle2 }
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
-                    tab.isMain && !isActive
-                      ? 'bg-blue-950/60 text-blue-300 border border-blue-800/60 hover:bg-blue-900/60'
-                      : isActive
-                        ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-900/40'
-                        : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate">{tab.label}</span>
-                  </div>
-                  {tab.isMain && (
-                    <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ml-1">Main</span>
-                  )}
-                  {isActive && !tab.isMain && (
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          <div>
+            <h1 className="font-bold text-base tracking-wide text-white">{t.appName}</h1>
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider">{t.subTitle}</p>
+          </div>
         </div>
 
-        {/* User Footer */}
-        <div className="p-3 border-t border-slate-800/80 flex items-center gap-2.5 relative">
-          <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs flex-shrink-0">
-            <User className="w-4 h-4" />
+        {/* Project Context Box */}
+        <div className="mx-4 my-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700/60">
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+            <Building2 className="w-4 h-4" />
+            <span>{t.projectTitle}</span>
           </div>
-          <div className="overflow-hidden flex-1">
-            <p className="text-xs font-bold text-white truncate">Tanachock C.</p>
-            <p className="text-[10px] text-slate-400 truncate">Site Engineer</p>
+          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+            <span>8 Floors • 216 Rooms</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          </div>
+        </div>
+
+        {/* Navigation Menu */}
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
+          {[
+            { id: 'dashboard', icon: LayoutDashboard, label: t.nav.dashboard },
+            { id: 'floorStatus', icon: Grid, label: t.nav.floorStatus },
+            { id: 'newInspection', icon: ClipboardCheck, label: t.nav.newInspection },
+            { id: 'inspectionRecords', icon: History, label: t.nav.inspectionRecords },
+            { id: 'documentCenter', icon: FolderKanban, label: t.nav.documentCenter },
+            { id: 'aiAssistant', icon: Bot, label: t.nav.aiAssistant, badge: 'AI' },
+            { id: 'handover', icon: CheckCircle2, label: t.nav.handover }
+          ].map(item => {
+            const Icon = item.icon;
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                  active 
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' 
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon className={`w-4 h-4 ${active ? 'text-white' : 'text-slate-400'}`} />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span className="px-1.5 py-0.5 text-[9px] bg-emerald-400/20 text-emerald-300 font-bold rounded border border-emerald-400/30">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User Info Footer */}
+        <div className="p-3 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-300 font-bold text-xs">
+              TC
+            </div>
+            <div className="text-left truncate">
+              <p className="text-xs font-semibold text-slate-200 truncate">{t.siteEngineer}</p>
+              <p className="text-[10px] text-emerald-400">Online • Site Active</p>
+            </div>
           </div>
         </div>
       </aside>
 
-      {/* ---------------------------------------------------- */}
-      {/* RIGHT MAIN CONTENT CONTAINER                         */}
-      {/* ---------------------------------------------------- */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* --- MAIN CONTENT AREA --- */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-900">
         
-        {/* TOP HEADER BAR */}
-        <header className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center sticky top-0 z-40 shadow-sm">
-          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
-            <span>Boutique Bangkok Sukhumvit 5</span>
-            <span>/</span>
-            <span className="text-slate-900 font-bold capitalize">
-              {activeTab === 'dashboard' && 'Dashboard'}
-              {activeTab === 'floors' && 'Floor Status'}
-              {activeTab === 'inspections' && 'Room Inspections'}
-              {activeTab === 'records' && 'Inspection Records'}
-              {activeTab === 'documents' && 'Documents'}
-              {activeTab === 'ai' && 'AI Assistant'}
-              {activeTab === 'handover' && 'Handover Dashboard'}
-            </span>
+        {/* Top Header Bar */}
+        <header className="h-14 border-b border-slate-800 bg-slate-950/30 px-6 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="relative w-full">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder={t.common.search}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-800/70 border border-slate-700/80 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 relative">
-            {/* Language Selector */}
-            <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-bold border border-slate-200">
-              <button 
-                onClick={() => setLang('TH')}
-                className={`px-2.5 py-1 rounded-md transition ${lang === 'TH' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                TH
-              </button>
-              <button 
-                onClick={() => setLang('EN')}
-                className={`px-2.5 py-1 rounded-md transition ${lang === 'EN' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                EN
-              </button>
-            </div>
-
-            {/* Notification Bell Dropdown */}
-            <div className="relative">
-              <button 
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="p-1.5 hover:bg-slate-100 rounded-full transition text-slate-600 relative"
-              >
-                <Bell className="w-4 h-4" />
-                <span className="absolute -top-0.5 -right-0.5 bg-rose-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                  3
-                </span>
-              </button>
-
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border p-3 z-50 text-xs space-y-2">
-                  <div className="font-bold text-slate-800 border-b pb-1.5 flex justify-between items-center">
-                    <span>Notifications</span>
-                    <span className="text-[10px] text-blue-600 cursor-pointer">Mark all read</span>
-                  </div>
-                  <div className="p-2 bg-rose-50 border border-rose-100 rounded-lg text-rose-800">
-                    <p className="font-bold">Room 801 Inspection Failed</p>
-                    <p className="text-[10px] text-rose-600 mt-0.5">Missing Mix Valve in Bathroom</p>
-                  </div>
-                  <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-800">
-                    <p className="font-bold">Room 803 Passed</p>
-                    <p className="text-[10px] text-emerald-600 mt-0.5">Approved by Surachai P.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* User Profile Menu Dropdown */}
-            <div 
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-8 h-8 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center cursor-pointer shadow-sm hover:ring-2 hover:ring-blue-300 transition"
+          <div className="flex items-center gap-3">
+            {/* Language Switcher Button */}
+            <button
+              onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors"
             >
-              SP
-            </div>
+              <Languages className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{lang === 'th' ? 'TH | THAI' : 'EN | ENGLISH'}</span>
+            </button>
 
-            {showUserMenu && (
-              <div className="absolute right-0 top-10 w-48 bg-white rounded-xl shadow-xl border p-2 z-50 text-xs space-y-1">
-                <div className="p-2 border-b">
-                  <p className="font-bold text-slate-800">Surachai P.</p>
-                  <p className="text-[10px] text-slate-500">Project Manager</p>
-                </div>
-                <button className="w-full text-left p-2 hover:bg-slate-50 rounded text-slate-700 font-medium">Profile Settings</button>
-                <button className="w-full text-left p-2 hover:bg-rose-50 text-rose-600 rounded font-medium">Log Out</button>
-              </div>
-            )}
+            {/* Quick Action Notification Button */}
+            <button 
+              onClick={() => showToast(lang === 'th' ? "การแจ้งเตือนล่าสุด: ตรวจสอบห้อง 412 เรียบร้อย" : "Notification: Room 412 inspected")}
+              className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white relative"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="w-2 h-2 rounded-full bg-red-500 absolute top-1 right-1"></span>
+            </button>
           </div>
         </header>
 
-        {/* ---------------------------------------------------- */}
-        {/* DYNAMIC MODULE PAGE CONTENT                          */}
-        {/* ---------------------------------------------------- */}
-        <main className="p-6 space-y-6 flex-1 overflow-y-auto">
-          
-          {/* ================= PAGE 1: DASHBOARD ================= */}
+        {/* View Content Renderer */}
+        <main className="flex-1 overflow-y-auto p-6">
           {activeTab === 'dashboard' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">Dashboard</h2>
-                  <p className="text-xs text-slate-500 font-medium">Boutique Bangkok Sukhumvit 5 · Hotel Project</p>
-                </div>
-
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-700 w-max shadow-sm">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span>((o)) Live Sync | Last updated: Just now</span>
-                </div>
-              </div>
-
-              {/* 5 KPI Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Total Rooms</p>
-                    <p className="text-3xl font-black text-slate-800 mt-1">174</p>
-                  </div>
-                  <div className="bg-slate-100 p-2.5 rounded-xl text-slate-600">
-                    <Building2 className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Passed Rooms</p>
-                    <p className="text-3xl font-black text-emerald-600 mt-1">75</p>
-                  </div>
-                  <div className="bg-emerald-50 p-2.5 rounded-xl text-emerald-600">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-rose-500 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Failed Rooms</p>
-                    <p className="text-3xl font-black text-rose-600 mt-1">6</p>
-                  </div>
-                  <div className="bg-rose-50 p-2.5 rounded-xl text-rose-600">
-                    <XCircle className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-blue-500 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Ready For Inspection</p>
-                    <p className="text-3xl font-black text-blue-600 mt-1">44</p>
-                  </div>
-                  <div className="bg-blue-50 p-2.5 rounded-xl text-blue-600">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Not Submitted</p>
-                    <p className="text-3xl font-black text-slate-700 mt-1">49</p>
-                  </div>
-                  <div className="bg-slate-100 p-2.5 rounded-xl text-slate-500">
-                    <AlertTriangle className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Charts Section */}
-              <div className="grid lg:grid-cols-12 gap-6">
-                
-                {/* Left: Bar Chart */}
-                <div className="lg:col-span-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm mb-4">Inspection Status by Floor</h3>
-                    
-                    <div className="h-64 flex items-end justify-between gap-3 pt-6 pb-2 border-b border-l border-slate-200 px-2 relative">
-                      <div className="absolute left-[-24px] top-0 bottom-0 flex flex-col justify-between text-[10px] text-slate-400 font-semibold">
-                        <span>28</span>
-                        <span>21</span>
-                        <span>14</span>
-                        <span>7</span>
-                        <span>0</span>
-                      </div>
-
-                      {[
-                        { floor: 'F1', passed: 3, ready: 2, failed: 0, gray: 2 },
-                        { floor: 'F2', passed: 5, ready: 3, failed: 0, gray: 3 },
-                        { floor: 'F3', passed: 12, ready: 3, failed: 1, gray: 10 },
-                        { floor: 'F4', passed: 11, ready: 8, failed: 1, gray: 6 },
-                        { floor: 'F5', passed: 11, ready: 10, failed: 1, gray: 4 },
-                        { floor: 'F6', passed: 11, ready: 8, failed: 1, gray: 6 },
-                        { floor: 'F7', passed: 12, ready: 6, failed: 1, gray: 7 },
-                        { floor: 'F8', passed: 10, ready: 7, failed: 1, gray: 4 },
-                      ].map((item, idx) => (
-                        <div key={idx} className="flex-1 flex flex-col justify-end items-center h-full max-w-[36px]">
-                          <div className="w-full flex flex-col-reverse rounded-t overflow-hidden shadow-xs">
-                            <div style={{ height: `${item.passed * 7}px` }} className="bg-emerald-500 w-full"></div>
-                            <div style={{ height: `${item.failed * 7}px` }} className="bg-rose-500 w-full"></div>
-                            <div style={{ height: `${item.ready * 7}px` }} className="bg-blue-500 w-full"></div>
-                            <div style={{ height: `${item.gray * 7}px` }} className="bg-slate-400 w-full"></div>
-                          </div>
-                          <span className="text-[11px] text-slate-500 font-bold mt-2">{item.floor}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap justify-center gap-4 text-xs font-semibold text-slate-600 mt-4 pt-2">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-rose-500 rounded-sm"></span> Failed</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-slate-400 rounded-sm"></span> Not Submitted</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-emerald-500 rounded-sm"></span> Passed</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-blue-500 rounded-sm"></span> Ready For Inspection</span>
-                  </div>
-                </div>
-
-                {/* Right: Donut Chart */}
-                <div className="lg:col-span-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm mb-4">Inspection Result Summary</h3>
-                    
-                    <div className="relative w-44 h-44 mx-auto my-2 flex items-center justify-center">
-                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                        <path strokeDasharray="43, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#10B981" strokeWidth="4.5" />
-                        <path strokeDasharray="25, 100" strokeDashoffset="-43" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3B82F6" strokeWidth="4.5" />
-                        <path strokeDasharray="28, 100" strokeDashoffset="-68" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#9CA3AF" strokeWidth="4.5" />
-                        <path strokeDasharray="4, 100" strokeDashoffset="-96" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#EF4444" strokeWidth="4.5" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-xs font-semibold text-slate-700 pt-2 border-t border-slate-100">
-                    <div className="flex justify-between items-center"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span> Passed</span><span className="font-bold">75</span></div>
-                    <div className="flex justify-between items-center"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 bg-rose-500 rounded-full"></span> Failed</span><span className="font-bold">6</span></div>
-                    <div className="flex justify-between items-center"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 bg-blue-500 rounded-full"></span> Ready For Inspection</span><span className="font-bold">44</span></div>
-                    <div className="flex justify-between items-center"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 bg-slate-400 rounded-full"></span> Not Submitted</span><span className="font-bold">49</span></div>
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
+            <DashboardView 
+              t={t} 
+              stats={stats} 
+              rooms={filteredRooms} 
+              onInspectRoom={(r) => setModalRoom(r)} 
+              setSelectedStatusFilter={setSelectedStatusFilter}
+            />
           )}
 
-          {/* ================= PAGE 2: FLOOR STATUS VIEW ================= */}
-          {activeTab === 'floors' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Floor Status</h2>
-                <p className="text-xs text-slate-500">Boutique Bangkok Sukhumvit 5</p>
-              </div>
-
-              <div className="grid lg:grid-cols-12 gap-6">
-                
-                {/* Left Floor Selection Menu */}
-                <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                  <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Select Floor
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {[
-                      { fl: '1', count: '7 Rooms' },
-                      { fl: '2', count: '11 Rooms' },
-                      { fl: '3', count: '26 Rooms' },
-                      { fl: '4', count: '27 Rooms' },
-                      { fl: '5', count: '27 Rooms' },
-                      { fl: '6', count: '27 Rooms' },
-                      { fl: '7', count: '27 Rooms' },
-                      { fl: '8', count: '22 Rooms' },
-                    ].map((item) => (
-                      <button
-                        key={item.fl}
-                        onClick={() => setSelectedFloor(item.fl)}
-                        className={`w-full p-3 flex justify-between items-center text-left transition ${selectedFloor === item.fl ? 'bg-blue-50/80 border-l-4 border-l-blue-600 text-blue-900 font-bold' : 'hover:bg-slate-50 text-slate-700 font-medium'}`}
-                      >
-                        <div>
-                          <p className="text-xs font-bold">Floor {item.fl}</p>
-                          <p className="text-[10px] text-slate-400">{item.count}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Right Floor Grid Box Details */}
-                <div className="lg:col-span-9 space-y-4">
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                    <div className="flex justify-between items-center border-b pb-3">
-                      <div>
-                        <h3 className="font-bold text-slate-800 text-base">Floor {selectedFloor}</h3>
-                        <p className="text-xs text-slate-500">22 rooms on this floor</p>
-                      </div>
-                      
-                      <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-sm"></span> Passed</span>
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-rose-500 rounded-sm"></span> Failed</span>
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-blue-500 rounded-sm"></span> Ready For Inspection</span>
-                        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-slate-300 rounded-sm"></span> Not Submitted</span>
-                      </div>
-                    </div>
-
-                    <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center py-1 bg-slate-50 rounded border border-dashed border-slate-200">
-                      — Guest room corridor —
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                      {roomsFloor8.map((room) => {
-                        let bgColor = 'bg-slate-200 text-slate-700 border-slate-300';
-                        if (room.status === 'Failed') bgColor = 'bg-rose-500 text-white border-rose-600';
-                        if (room.status === 'Ready') bgColor = 'bg-blue-500 text-white border-blue-600';
-                        if (room.status === 'Passed') bgColor = 'bg-emerald-500 text-white border-emerald-600';
-
-                        return (
-                          <div 
-                            key={room.id}
-                            onClick={() => { setSelectedRecordRoom(room.id); setActiveTab('records'); }}
-                            className={`p-3 rounded-xl border shadow-xs cursor-pointer hover:scale-105 transition-all flex flex-col justify-between h-20 ${bgColor}`}
-                          >
-                            <span className="font-black text-base">{room.id}</span>
-                            <span className="text-[10px] opacity-90">{room.type}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Floor Summary Status Pills */}
-                  <div className="grid grid-cols-4 gap-3 text-center">
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-                      <p className="text-xl font-black text-emerald-600">10</p>
-                      <p className="text-[10px] font-bold text-emerald-800 uppercase">Passed</p>
-                    </div>
-                    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3">
-                      <p className="text-xl font-black text-rose-600">1</p>
-                      <p className="text-[10px] font-bold text-rose-800 uppercase">Failed</p>
-                    </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                      <p className="text-xl font-black text-blue-600">6</p>
-                      <p className="text-[10px] font-bold text-blue-800 uppercase">Ready</p>
-                    </div>
-                    <div className="bg-slate-100 border border-slate-200 rounded-xl p-3">
-                      <p className="text-xl font-black text-slate-700">5</p>
-                      <p className="text-[10px] font-bold text-slate-600 uppercase">Not Submitted</p>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
+          {activeTab === 'floorStatus' && (
+            <FloorStatusView 
+              t={t} 
+              rooms={filteredRooms} 
+              selectedFloor={selectedFloorFilter} 
+              setSelectedFloor={setSelectedFloorFilter}
+              onInspectRoom={(r) => setModalRoom(r)} 
+            />
           )}
 
-          {/* ================= PAGE 3: ROOM INSPECTIONS (SUBMIT FORM) ================= */}
-          {activeTab === 'inspections' && (
-            <div className="space-y-6 max-w-4xl mx-auto">
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">Submit Inspection</h2>
-                <p className="text-xs text-slate-500">Boutique Bangkok Sukhumvit 5</p>
-              </div>
-
-              {/* Inspection Form Details */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-800 text-sm border-b pb-2">Inspection Details</h3>
-                
-                <div className="grid md:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Floor <span className="text-rose-500">*</span></label>
-                    <select 
-                      value={formFloor} 
-                      onChange={(e) => setFormFloor(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-medium focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select floor...</option>
-                      {[1,2,3,4,5,6,7,8].map(f => <option key={f} value={f}>Floor {f}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Room Number <span className="text-rose-500">*</span></label>
-                    <select 
-                      value={formRoom} 
-                      onChange={(e) => setFormRoom(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-medium focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select room...</option>
-                      {['801','802','803','804','805','806','807'].map(r => <option key={r} value={r}>Room {r}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Inspection Category <span className="text-rose-500">*</span></label>
-                    <select 
-                      value={formCategory} 
-                      onChange={(e) => setFormCategory(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-medium focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select category...</option>
-                      <option value="Architecture">Architecture (สถาปัตยกรรม)</option>
-                      <option value="MEP">MEP & Plumbing (งานระบบ)</option>
-                      <option value="Electrical">Electrical (งานไฟฟ้า)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Inspection Date <span className="text-rose-500">*</span></label>
-                    <input 
-                      type="date" 
-                      value={formDate} 
-                      onChange={(e) => setFormDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-medium focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Inspector <span className="text-rose-500">*</span></label>
-                    <select 
-                      value={formInspector} 
-                      onChange={(e) => setFormInspector(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-medium focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select inspector...</option>
-                      <option value="Tanachock C.">Tanachock C. (Site Engineer)</option>
-                      <option value="Surachai P.">Surachai P. (Project Manager)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Inspection Status <span className="text-rose-500">*</span></label>
-                    <div className="grid grid-cols-3 gap-1">
-                      {['Ready For Inspection', 'Passed', 'Failed'].map((st) => (
-                        <button
-                          type="button"
-                          key={st}
-                          onClick={() => setFormStatus(st)}
-                          className={`p-2 text-[10px] font-bold rounded-lg border transition ${formStatus === st ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          {st}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 text-xs mb-1">Comments / Remarks</label>
-                  <textarea 
-                    rows="3" 
-                    value={formComments} 
-                    onChange={(e) => setFormComments(e.target.value)}
-                    placeholder="Enter comments or remarks..." 
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-blue-500"
-                  ></textarea>
-                </div>
-              </div>
-
-              {/* Upload Evidence Box */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-800 text-sm border-b pb-2">Attachments <span className="text-rose-500">*</span></h3>
-                
-                <div className="grid md:grid-cols-3 gap-4 text-center">
-                  <label className="border-2 border-dashed border-blue-300 bg-blue-50/50 hover:bg-blue-50 p-5 rounded-xl cursor-pointer flex flex-col items-center justify-center transition">
-                    <Camera className="w-6 h-6 text-blue-600 mb-1" />
-                    <span className="text-xs font-bold text-blue-600">Add Photos *</span>
-                    <span className="text-[10px] text-blue-400 mt-0.5">File Explorer / Camera</span>
-                    <input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="hidden" />
-                  </label>
-
-                  <label className="border-2 border-dashed border-amber-300 bg-amber-50/50 hover:bg-amber-50 p-5 rounded-xl cursor-pointer flex flex-col items-center justify-center transition">
-                    <FileText className="w-6 h-6 text-amber-600 mb-1" />
-                    <span className="text-xs font-bold text-amber-600">Add PDF</span>
-                    <span className="text-[10px] text-amber-500 mt-0.5">PDF</span>
-                    <input type="file" accept=".pdf" onChange={(e) => setUploadedPdf(e.target.files[0])} className="hidden" />
-                  </label>
-
-                  <label className="border-2 border-dashed border-purple-300 bg-purple-50/50 hover:bg-purple-50 p-5 rounded-xl cursor-pointer flex flex-col items-center justify-center transition">
-                    <Upload className="w-6 h-6 text-purple-600 mb-1" />
-                    <span className="text-xs font-bold text-purple-600">Add RI Document</span>
-                    <span className="text-[10px] text-purple-400 mt-0.5">RI PDF / DOCX</span>
-                    <input type="file" accept=".pdf,.docx" onChange={(e) => setUploadedRi(e.target.files[0])} className="hidden" />
-                  </label>
-                </div>
-
-                {aiValidationResult && (
-                  <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg flex items-center gap-2 text-emerald-800 text-xs">
-                    <Sparkles className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <div>
-                      <span className="font-bold">{aiValidationResult.message}</span>
-                      <span className="text-[10px] text-emerald-600 block">Confidence: {aiValidationResult.confidence}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Form Action Buttons */}
-              <div className="flex justify-end gap-3 pt-2">
-                <button 
-                  onClick={() => alert('Draft saved successfully!')} 
-                  className="px-5 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 transition shadow-xs"
-                >
-                  Save Draft
-                </button>
-                <button 
-                  onClick={() => alert('Inspection submitted successfully!')} 
-                  disabled={!isFormComplete} 
-                  className={`px-6 py-2.5 rounded-lg font-bold text-xs shadow-md transition ${isFormComplete ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
-                >
-                  Submit
-                </button>
-              </div>
-            </div>
+          {activeTab === 'newInspection' && (
+            <RoomInspectionFormView t={t} showToast={showToast} rooms={rooms} />
           )}
 
-          {/* ================= PAGE 4: INSPECTION RECORDS ================= */}
-          {activeTab === 'records' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Inspection Records</h2>
-                <p className="text-xs text-slate-500">Construction Inspection Timeline</p>
-              </div>
-
-              <div className="grid lg:grid-cols-12 gap-6">
-                
-                {/* Left Room List */}
-                <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                  <div className="p-3 border-b">
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                      <input type="text" placeholder="Search room..." className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border rounded-lg text-xs" />
-                    </div>
-                  </div>
-
-                  <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto text-xs">
-                    {['801','802','803','804','805','807','809','810','811','812'].map((rm) => (
-                      <button
-                        key={rm}
-                        onClick={() => setSelectedRecordRoom(rm)}
-                        className={`w-full p-3 flex items-center gap-3 text-left transition ${selectedRecordRoom === rm ? 'bg-blue-50/80 border-l-4 border-l-blue-600 font-bold' : 'hover:bg-slate-50'}`}
-                      >
-                        <span className={`w-8 h-8 rounded-lg text-white font-black text-xs flex items-center justify-center ${rm === '801' ? 'bg-rose-500' : rm === '804' || rm === '809' || rm === '811' ? 'bg-blue-500' : 'bg-emerald-500'}`}>
-                          {rm.slice(-2)}
-                        </span>
-                        <div>
-                          <p className="font-bold text-slate-800">Room {rm}</p>
-                          <p className="text-[10px] text-slate-400">Type E</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Right Timeline Checklist */}
-                <div className="lg:col-span-9 bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
-                  <div className="flex justify-between items-center border-b pb-3">
-                    <div>
-                      <h3 className="text-lg font-black text-slate-800">Room {selectedRecordRoom} — E</h3>
-                      <p className="text-xs text-slate-500">Floor 8 · Surachai P.</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${selectedRecordRoom === '801' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                      {selectedRecordRoom === '801' ? '● Failed' : '● Passed'}
-                    </span>
-                  </div>
-
-                  {/* Complete 13 Tasks Timeline List */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Architecture / งานสถาปัตยกรรม</h4>
-                    
-                    {[
-                      { title: 'Wall Plastering', th: 'ฉาบผนัง', date: '2026-03-10' },
-                      { title: 'Guest Room Skim Coat', th: 'สกิมผนังห้องพัก', date: '2026-03-11' },
-                      { title: 'Floor Leveling Screed', th: 'เทปรับระดับ', date: '2026-03-12' },
-                      { title: 'Primer Coat', th: 'ทาสีรองพื้น', date: '2026-03-13' },
-                      { title: 'Finish Paint — Coat 1', th: 'ทาสีจริงเที่ยวที่ 1', date: '2026-03-14' },
-                      { title: 'Finish Paint — Coat 2', th: 'ทาสีจริงเที่ยวที่ 2', date: '2026-03-15' },
-                      { title: 'Bathroom Tiling', th: 'ปูกระเบื้องห้องน้ำ', date: '2026-03-16' },
-                      { title: 'Ceiling Frame Installation', th: 'ติดตั้งโครงฝ้าเพดาน', date: '2026-03-17' },
-                      { title: 'Ceiling Board Closing', th: 'ปิดฝ้าเพดาน', date: '2026-03-18' },
-                      { title: 'Main Door & Hardware', th: 'ติดตั้งประตูบานหน้าห้องพร้อมอุปกรณ์', date: '2026-03-19' },
-                      { title: 'Bathroom Door & Hardware', th: 'ติดตั้งประตูห้องน้ำพร้อมอุปกรณ์', date: '2026-03-20' },
-                      { title: 'Shower Screen & Hardware', th: 'ประตูฉากกั้นอาบน้ำพร้อมอุปกรณ์', date: '2026-03-21' },
-                      { title: 'Skirting & Wood Floor Trim', th: 'ติดตั้งบัวและตัวจบพื้นไม้', date: '2026-03-22' },
-                    ].map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-2.5 bg-slate-50/60 rounded-lg border border-slate-100 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                          <div>
-                            <span className="font-bold text-slate-800">{item.title}</span>
-                            <span className="text-[11px] text-slate-500 block">{item.th}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-slate-400 font-medium">{item.date}</span>
-                          <button onClick={() => alert(`Opening photo evidence for ${item.title}`)} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded border border-blue-200 text-[10px] font-bold flex items-center gap-1">
-                            <Camera className="w-3 h-3" /> Photos
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            </div>
+          {activeTab === 'inspectionRecords' && (
+            <InspectionRecordsView t={t} rooms={rooms} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
           )}
 
-          {/* ================= PAGE 5: DOCUMENTS CENTER ================= */}
-          {activeTab === 'documents' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Document Center</h2>
-                <p className="text-xs text-slate-500">Boutique Bangkok Sukhumvit 5</p>
-              </div>
-
-              {/* Filters Bar */}
-              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center justify-between text-xs">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input 
-                    type="text" 
-                    value={docSearchQuery} 
-                    onChange={(e) => setDocSearchQuery(e.target.value)}
-                    placeholder="Search documents..." 
-                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border rounded-lg" 
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <select value={docFilterFloor} onChange={(e) => setDocFilterFloor(e.target.value)} className="bg-slate-50 border rounded-lg px-2.5 py-1.5 font-medium">
-                    <option value="All">All Floors</option>
-                    {[1,2,3,4,5,6,7,8].map(f => <option key={f} value={`Floor ${f}`}>Floor {f}</option>)}
-                  </select>
-
-                  <select value={docFilterTrade} onChange={(e) => setDocFilterTrade(e.target.value)} className="bg-slate-50 border rounded-lg px-2.5 py-1.5 font-medium">
-                    <option value="All">All Trades</option>
-                    <option value="RI">RI Documents</option>
-                    <option value="Report">Inspection Reports</option>
-                    <option value="Defect">Defect Reports</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid lg:grid-cols-12 gap-6">
-                
-                {/* Left Tree Navigator */}
-                <div className="lg:col-span-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs space-y-2">
-                  <p className="font-bold text-slate-500 uppercase text-[10px] tracking-wider mb-2">Document Tree</p>
-                  <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-                    <FolderTree className="w-4 h-4 text-blue-600" /> Boutique BKK
-                  </div>
-                  <div className="pl-4 space-y-1.5 text-slate-600 font-medium">
-                    {[
-                      { name: 'Floor 1', count: 0 },
-                      { name: 'Floor 2', count: 1 },
-                      { name: 'Floor 3', count: 1 },
-                      { name: 'Floor 4', count: 1 },
-                      { name: 'Floor 5', count: 0 },
-                      { name: 'Floor 6', count: 2 },
-                      { name: 'Floor 7', count: 1 },
-                      { name: 'Floor 8', count: 6 },
-                    ].map(fl => (
-                      <div key={fl.name} className="flex justify-between items-center hover:text-blue-600 cursor-pointer py-0.5">
-                        <span>📁 {fl.name}</span>
-                        <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{fl.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Right Document Grid */}
-                <div className="lg:col-span-9 space-y-3">
-                  <p className="text-xs text-slate-500 font-medium">{documentsList.length} documents found</p>
-                  
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {documentsList.map((doc, idx) => (
-                      <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-3">
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2.5 rounded-lg flex-shrink-0 ${doc.type === 'RI' ? 'bg-purple-50 text-purple-600' : doc.type === 'Report' ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'}`}>
-                            <FileText className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className="font-bold text-xs text-slate-800 break-all">{doc.name}</p>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">{doc.floor} · {doc.room}</span>
-                            <span className="text-[10px] text-slate-400 block">{doc.date}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-center pt-2 border-t text-[11px] font-bold">
-                          <button onClick={() => alert(`Downloading ${doc.name}`)} className="text-slate-600 hover:text-blue-600 flex items-center gap-1">
-                            <FileDown className="w-3.5 h-3.5" /> Download
-                          </button>
-                          <button onClick={() => setPreviewDoc(doc)} className="text-slate-600 hover:text-blue-600 flex items-center gap-1">
-                            <Eye className="w-3.5 h-3.5" /> Preview
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            </div>
+          {activeTab === 'documentCenter' && (
+            <DocumentCenterView t={t} showToast={showToast} />
           )}
 
-          {/* ================= PAGE 6: AI ASSISTANT ================= */}
-          {activeTab === 'ai' && (
-            <div className="space-y-6 max-w-3xl mx-auto">
-              <div className="text-center space-y-1">
-                <div className="w-10 h-10 bg-blue-600 text-white rounded-xl mx-auto flex items-center justify-center shadow-md">
-                  <Bot className="w-6 h-6" />
-                </div>
-                <h2 className="text-2xl font-black text-slate-900">AI Inspection Assistant</h2>
-                <p className="text-xs text-slate-500">Boutique Bangkok Sukhumvit 5</p>
-              </div>
-
-              {/* AI Tabs */}
-              <div className="flex bg-white p-1 rounded-xl border border-slate-200 text-xs font-bold shadow-xs">
-                <button onClick={() => setAiTab('photo')} className={`flex-1 py-2 rounded-lg transition ${aiTab === 'photo' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}>
-                  Photo Validation
-                </button>
-                <button onClick={() => setAiTab('voice')} className={`flex-1 py-2 rounded-lg transition ${aiTab === 'voice' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}>
-                  Voice to Text
-                </button>
-                <button onClick={() => setAiTab('summary')} className={`flex-1 py-2 rounded-lg transition ${aiTab === 'summary' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}>
-                  Inspection Summary
-                </button>
-              </div>
-
-              {/* Tab 1: Photo Validation */}
-              {aiTab === 'photo' && (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <p className="text-xs text-slate-500 text-center">Upload an inspection photo to verify if it is suitable evidence.</p>
-                  
-                  <label className="border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100/80 p-8 rounded-xl cursor-pointer flex flex-col items-center justify-center transition">
-                    <Upload className="w-8 h-8 text-slate-400 mb-2" />
-                    <span className="text-xs font-bold text-slate-700">Upload Photo</span>
-                    <span className="text-[10px] text-slate-400 mt-0.5">JPG, PNG up to 20MB</span>
-                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                  </label>
-
-                  {aiValidationResult && (
-                    <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-xs space-y-1 text-emerald-800">
-                      <p className="font-bold flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-emerald-600" /> {aiValidationResult.message}</p>
-                      <p className="text-[11px] text-emerald-600">Confidence Score: {aiValidationResult.confidence}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 2: Voice to Text */}
-              {aiTab === 'voice' && (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-center">
-                  <p className="text-xs text-slate-500">Record Thai or English voice note for inspection comments.</p>
-                  
-                  <button 
-                    onClick={handleVoiceRecordToggle}
-                    className={`p-6 rounded-full mx-auto transition shadow-md flex items-center justify-center ${isRecording ? 'bg-rose-600 text-white animate-pulse' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-                  >
-                    <Mic className="w-8 h-8" />
-                  </button>
-
-                  <p className="text-xs font-bold text-slate-700">{isRecording ? 'Listening...' : 'Tap to Start Recording'}</p>
-
-                  {voiceText && (
-                    <div className="p-4 bg-slate-50 border rounded-xl text-xs text-slate-800 text-left">
-                      <p className="font-bold text-slate-500 text-[10px] uppercase mb-1">Transcribed Text:</p>
-                      <p className="font-medium">{voiceText}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 3: Inspection Summary */}
-              {aiTab === 'summary' && (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
-                  <h3 className="font-bold text-slate-800">Automatic AI Inspection Summary</h3>
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-2 text-rose-900">
-                    <p className="font-black text-sm">Inspection Result: FAILED</p>
-                    <p><strong>Room:</strong> 801 (Floor 8)</p>
-                    <p><strong>Reason:</strong> Mix Valve not installed in Bathroom sanitary fitting stage.</p>
-                    <p><strong>Recommendation:</strong> Resubmit inspection after MEP contractor completes Mix Valve installation.</p>
-                  </div>
-                </div>
-              )}
-            </div>
+          {activeTab === 'aiAssistant' && (
+            <AIAssistantView t={t} showToast={showToast} />
           )}
 
-          {/* ================= PAGE 7: HANDOVER DASHBOARD ================= */}
           {activeTab === 'handover' && (
-            <div className="space-y-6 max-w-7xl mx-auto">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">Handover Dashboard</h2>
-                  <p className="text-xs text-slate-500">Boutique Bangkok Sukhumvit 5 · Area Handover Status</p>
-                </div>
-
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-700">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span>((o)) Live Sync | Last updated: Just now</span>
-                </div>
-              </div>
-
-              {/* 4 Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-emerald-500 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Ready For Handover</p>
-                    <p className="text-3xl font-black text-emerald-600 mt-1">75</p>
-                  </div>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                </div>
-
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-blue-500 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Pending Inspection</p>
-                    <p className="text-3xl font-black text-blue-600 mt-1">93</p>
-                  </div>
-                  <Clock className="w-5 h-5 text-blue-500" />
-                </div>
-
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-rose-500 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Failed Rooms</p>
-                    <p className="text-3xl font-black text-rose-600 mt-1">6</p>
-                  </div>
-                  <XCircle className="w-5 h-5 text-rose-500" />
-                </div>
-
-                <div className="bg-white rounded-xl p-4 border border-slate-200 border-l-4 border-l-slate-400 shadow-sm flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">Total Rooms</p>
-                    <p className="text-3xl font-black text-slate-800 mt-1">174</p>
-                  </div>
-                  <Building2 className="w-5 h-5 text-slate-500" />
-                </div>
-              </div>
-
-              {/* Building Heatmap & Floor Summary Table */}
-              <div className="grid lg:grid-cols-12 gap-6">
-                
-                {/* Building Heatmap Matrix */}
-                <div className="lg:col-span-7 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <h3 className="font-bold text-slate-800 text-sm">Building Heatmap</h3>
-                  
-                  <div className="space-y-2 text-xs">
-                    {[8,7,6,5,4,3,2,1].map((fl) => (
-                      <div key={fl} className="flex items-center gap-3">
-                        <span className="w-6 font-bold text-slate-500 text-right">{fl}</span>
-                        <div className="flex-1 grid grid-cols-8 gap-1.5">
-                          {[1,2,3,4,5,6,7,8].map((rmIdx) => {
-                            const isFailed = (fl === 8 && rmIdx === 1) || (fl === 7 && rmIdx === 6) || (fl === 6 && rmIdx === 4);
-                            const isPassed = rmIdx % 2 === 0;
-                            return (
-                              <div 
-                                key={rmIdx} 
-                                className={`h-6 rounded-md shadow-xs ${isFailed ? 'bg-rose-500' : isPassed ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                              ></div>
-                            );
-                          })}
-                        </div>
-                        <span className="text-[10px] text-slate-400 w-12">{fl === 8 ? '22 rooms' : '27 rooms'}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Floor Summary Status Table */}
-                <div className="lg:col-span-5 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <h3 className="font-bold text-slate-800 text-sm">Floor Summary</h3>
-                  
-                  <div className="space-y-2 text-xs">
-                    {floorSummaryData.map((f, idx) => (
-                      <div key={idx} className="p-2.5 bg-slate-50 rounded-lg border flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-slate-800">{f.floor}</p>
-                          <div className="flex gap-2 text-[10px] mt-0.5 font-semibold">
-                            <span className="text-emerald-700">Passed: {f.passed}</span>
-                            <span className="text-rose-600">Failed: {f.failed}</span>
-                            <span className="text-blue-600">Ready: {f.ready}</span>
-                          </div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${f.status === 'Failed' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {f.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            </div>
+            <HandoverDashboardView t={t} rooms={rooms} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
           )}
-
         </main>
       </div>
 
-      {/* DOCUMENT PREVIEW MODAL */}
-      {previewDoc && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-start border-b pb-3">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">{previewDoc.name}</h3>
-                <p className="text-xs text-slate-500">{previewDoc.floor} · {previewDoc.room}</p>
+      {/* --- GLOBAL ROOM INSPECTION MODAL --- */}
+      {modalRoom && (
+        <RoomDetailModal 
+          room={modalRoom} 
+          t={t} 
+          onClose={() => setModalRoom(null)}
+          onSave={(updated) => {
+            setRooms(rooms.map(r => r.id === updated.id ? updated : r));
+            showToast(lang === 'th' ? `อัปเดตข้อมูลห้อง ${updated.roomNumber} สำเร็จ` : `Room ${updated.roomNumber} updated successfully`);
+            setModalRoom(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// MODULE 1: DASHBOARD VIEW
+// ==========================================
+function DashboardView({ t, stats, rooms, onInspectRoom, setSelectedStatusFilter }) {
+  const [chartMode, setChartMode] = useState('completion'); // completion | trade
+
+  return (
+    <div className="space-y-6">
+      {/* Metric Cards Row */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div 
+          onClick={() => setSelectedStatusFilter('all')}
+          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-emerald-500 transition-all hover:scale-[1.01]"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase">{t.metrics.totalRooms}</span>
+            <Building2 className="w-5 h-5 text-blue-400" />
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-bold text-white">{stats.total}</span>
+            <span className="text-xs text-blue-400">100% Total</span>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => setSelectedStatusFilter('ready')}
+          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-emerald-500 transition-all hover:scale-[1.01]"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase">{t.metrics.passedRooms}</span>
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-bold text-emerald-400">{stats.ready}</span>
+            <span className="text-xs text-emerald-400 font-medium">
+              {Math.round((stats.ready / stats.total) * 100)}% Ready
+            </span>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => setSelectedStatusFilter('defect')}
+          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-red-500 transition-all hover:scale-[1.01]"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase">{t.metrics.defectsFound}</span>
+            <AlertTriangle className="w-5 h-5 text-red-400" />
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-bold text-red-400">{stats.defect}</span>
+            <span className="text-xs text-red-400 font-medium">Action Required</span>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => setSelectedStatusFilter('inProgress')}
+          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-amber-500 transition-all hover:scale-[1.01]"
+        >
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-xs font-semibold uppercase">{t.metrics.pendingInspection}</span>
+            <Clock className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-bold text-amber-400">{stats.inProgress}</span>
+            <span className="text-xs text-amber-400 font-medium">In Construction</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Dynamic Progress Charts Panel */}
+      <div className="bg-slate-800/70 border border-slate-700/80 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-bold text-base text-slate-100">ความก้าวหน้าโครงการรายชั้น (Floor Completion Overview)</h2>
+            <p className="text-xs text-slate-400">คำนวณจากสถานะงาน 13 รายการในแต่ละห้องพัก</p>
+          </div>
+          <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-700 text-xs">
+            <button 
+              onClick={() => setChartMode('completion')}
+              className={`px-3 py-1 rounded ${chartMode === 'completion' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
+            >
+              Floor Progress
+            </button>
+            <button 
+              onClick={() => setChartMode('trade')}
+              className={`px-3 py-1 rounded ${chartMode === 'trade' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
+            >
+              Trade Defects
+            </button>
+          </div>
+        </div>
+
+        {chartMode === 'completion' ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(floor => {
+              const floorRooms = rooms.filter(r => r.floor === floor);
+              const readyCount = floorRooms.filter(r => r.status === 'ready').length;
+              const percent = Math.round((readyCount / (floorRooms.length || 1)) * 100);
+              return (
+                <div key={floor} className="flex items-center gap-4">
+                  <span className="w-16 text-xs font-semibold text-slate-300">ชั้น {floor}</span>
+                  <div className="flex-1 bg-slate-900 rounded-full h-3.5 overflow-hidden border border-slate-700">
+                    <div 
+                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${percent}%` }}
+                    ></div>
+                  </div>
+                  <span className="w-12 text-right text-xs font-bold text-emerald-400">{percent}%</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-2">
+            {["Wall Plastering", "Bathroom Tiling", "Primer Paint", "Main Door"].map((trade, i) => (
+              <div key={trade} className="p-4 bg-slate-900/60 rounded-lg border border-slate-700/60">
+                <span className="text-xs text-slate-400">{trade}</span>
+                <p className="text-xl font-bold text-red-400 mt-1">{(i + 1) * 3} Defect Points</p>
+                <div className="mt-2 text-[10px] text-slate-500">ความล่าช้าส่งผลกระทบ 12%</div>
               </div>
-              <button onClick={() => setPreviewDoc(null)} className="text-slate-400 hover:text-slate-600 font-bold text-base">✕</button>
-            </div>
-            
-            <div className="bg-slate-100 p-8 rounded-xl text-center space-y-2">
-              <FileText className="w-12 h-12 text-blue-600 mx-auto" />
-              <p className="text-xs font-bold text-slate-700">Digital Document Preview</p>
-              <p className="text-[10px] text-slate-500">Quality Control Verified Document</p>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Room Quick Inspection Table */}
+      <div className="bg-slate-800/70 border border-slate-700/80 rounded-xl overflow-hidden">
+        <div className="p-4 border-b border-slate-700/80 flex items-center justify-between">
+          <h3 className="font-semibold text-sm text-slate-200">รายชื่อห้องพัก (Room Inspection List)</h3>
+          <span className="text-xs text-slate-400">แสดงผล {rooms.length} ห้อง</span>
+        </div>
+        <div className="overflow-x-auto max-h-96">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-900/80 text-[11px] uppercase text-slate-400 sticky top-0">
+              <tr>
+                <th className="p-3 pl-4">ห้องพัก</th>
+                <th className="p-3">ประเภทห้อง</th>
+                <th className="p-3">ชั้น</th>
+                <th className="p-3">ความคืบหน้า (13 งาน)</th>
+                <th className="p-3">สถานะ</th>
+                <th className="p-3 text-right pr-4">การจัดการ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50 text-xs text-slate-300">
+              {rooms.slice(0, 15).map(room => (
+                <tr key={room.id} className="hover:bg-slate-750 transition-colors">
+                  <td className="p-3 pl-4 font-bold text-emerald-400">{room.roomNumber}</td>
+                  <td className="p-3">{room.type}</td>
+                  <td className="p-3">ชั้น {room.floor}</td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 bg-slate-900 rounded-full h-2">
+                        <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${room.progress}%` }}></div>
+                      </div>
+                      <span className="text-[10px] text-slate-400">{room.progress}%</span>
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <StatusBadge status={room.status} t={t} />
+                  </td>
+                  <td className="p-3 text-right pr-4">
+                    <button 
+                      onClick={() => onInspectRoom(room)}
+                      className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-slate-200 text-xs font-medium inline-flex items-center gap-1 transition-colors"
+                    >
+                      <Eye className="w-3 h-3 text-emerald-400" />
+                      <span>{t.common.details}</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MODULE 2: FLOOR STATUS VIEW
+// ==========================================
+function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectRoom }) {
+  const floors = [1, 2, 3, 4, 5, 6, 7, 8];
+
+  const currentFloorRooms = useMemo(() => {
+    if (selectedFloor === 'all') return rooms;
+    return rooms.filter(r => r.floor.toString() === selectedFloor);
+  }, [rooms, selectedFloor]);
+
+  return (
+    <div className="space-y-6">
+      {/* Floor Filter Controls */}
+      <div className="flex items-center justify-between bg-slate-800/70 p-4 rounded-xl border border-slate-700">
+        <div>
+          <h2 className="font-bold text-base text-slate-100">ผังแสดงสถานะห้องพักรายชั้น (Floor Grid Selector)</h2>
+          <p className="text-xs text-slate-400">คลิกที่ห้องพักเพื่อตรวจเช็คสถานะละเอียด</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setSelectedFloor('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+              selectedFloor === 'all' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'
+            }`}
+          >
+            {t.common.filterAll}
+          </button>
+          {floors.map(f => (
+            <button
+              key={f}
+              onClick={() => setSelectedFloor(f.toString())}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                selectedFloor === f.toString() ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'
+              }`}
+            >
+              ชั้น {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Grid Layout */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-3">
+        {currentFloorRooms.map(room => (
+          <div
+            key={room.id}
+            onClick={() => onInspectRoom(room)}
+            className={`p-3 rounded-xl border transition-all cursor-pointer hover:scale-105 flex flex-col justify-between h-24 relative overflow-hidden ${
+              room.status === 'ready' 
+                ? 'bg-emerald-950/40 border-emerald-500/50 hover:border-emerald-400' 
+                : room.status === 'defect'
+                ? 'bg-red-950/40 border-red-500/50 hover:border-red-400'
+                : 'bg-slate-800/80 border-slate-700 hover:border-slate-500'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-extrabold text-sm text-slate-100">{room.roomNumber}</span>
+              {room.status === 'ready' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+              {room.status === 'defect' && <AlertTriangle className="w-4 h-4 text-red-400" />}
+              {room.status === 'inProgress' && <Clock className="w-4 h-4 text-amber-400" />}
             </div>
 
+            <div className="text-[10px] text-slate-400 truncate">{room.type}</div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-[9px] text-slate-400">
+                <span>Progress</span>
+                <span className="font-bold text-slate-200">{room.progress}%</span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                <div 
+                  className={`h-full ${
+                    room.status === 'ready' ? 'bg-emerald-500' : room.status === 'defect' ? 'bg-red-500' : 'bg-amber-500'
+                  }`}
+                  style={{ width: `${room.progress}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MODULE 3: NEW INSPECTION FORM
+// ==========================================
+function RoomInspectionFormView({ t, showToast, rooms }) {
+  const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.roomNumber || '101');
+  const [taskName, setTaskName] = useState(TASKS_13[0]);
+  const [status, setStatus] = useState('passed');
+  const [remarks, setRemarks] = useState('');
+  
+  // AI Simulation States
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [aiScore, setAiScore] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setPhotoPreview(URL.createObjectURL(file));
+      // Simulate AI analysis
+      setTimeout(() => {
+        setAiScore({
+          quality: "96% High Resolution",
+          clarity: "Passed (No blur)",
+          defectDetected: false
+        });
+      }, 600);
+    }
+  };
+
+  const handleVoiceRecord = () => {
+    setIsRecording(true);
+    setTimeout(() => {
+      setIsRecording(false);
+      setRemarks("การทาสี Finish Paint 1 พื้นผิวเรียบเนียน ไม่พบรอยด่างหรือรอยแปรง ตรวจสอบผ่าน");
+      showToast("แปลงเสียงเป็นข้อความสำเร็จ (Voice transcribed)");
+    }, 2500);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    showToast(`บันทึกการตรวจห้อง ${selectedRoom} - ${taskName} สำเร็จแล้ว`);
+    setRemarks('');
+    setPhotoPreview(null);
+    setAiScore(null);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-slate-100">ฟอร์มบันทึกการตรวจงาน (Room Inspection Form)</h2>
+        <p className="text-xs text-slate-400">บันทึกผลการตรวจสอบ 13 งาน พร้อมระบบ AI ช่วยวิเคราะห์รูปภาพและบันทึกเสียง</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">เลือกห้องพัก</label>
+            <select 
+              value={selectedRoom}
+              onChange={(e) => setSelectedRoom(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            >
+              {rooms.map(r => (
+                <option key={r.id} value={r.roomNumber}>ห้อง {r.roomNumber} (ชั้น {r.floor})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">งานที่ตรวจเช็ค (13 Tasks)</label>
+            <select 
+              value={taskName}
+              onChange={(e) => setTaskName(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            >
+              {TASKS_13.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">ผลการตรวจ</label>
+            <select 
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="passed">ผ่าน (Passed)</option>
+              <option value="defect">มีข้อบกพร่อง (Defect)</option>
+              <option value="inProgress">กำลังแก้ไข (In Progress)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Photo Upload with AI Scanner */}
+        <div className="border-2 border-dashed border-slate-700 rounded-xl p-4 bg-slate-900/40 text-center">
+          <input type="file" accept="image/*" onChange={handlePhotoUpload} id="photo-upload" className="hidden" />
+          <label htmlFor="photo-upload" className="cursor-pointer flex flex-col items-center justify-center">
+            <Camera className="w-8 h-8 text-emerald-400 mb-2" />
+            <span className="text-xs font-medium text-slate-200">แนบภาพถ่ายหน้างาน (Photo Upload)</span>
+            <span className="text-[10px] text-slate-400">รองรับ PNG, JPG พร้อม AI ประเมินคุณภาพภาพ</span>
+          </label>
+
+          {photoPreview && (
+            <div className="mt-4 flex flex-col md:flex-row items-center gap-4 bg-slate-800 p-3 rounded-lg border border-slate-700">
+              <img src={photoPreview} alt="Preview" className="w-32 h-24 object-cover rounded-md border border-slate-600" />
+              {aiScore && (
+                <div className="text-left text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                    <Sparkles className="w-4 h-4" />
+                    <span>AI Image Quality Score: {aiScore.quality}</span>
+                  </div>
+                  <p className="text-slate-300">ความคมชัด: {aiScore.clarity}</p>
+                  <p className="text-emerald-300">สถานะ: ภาพมีความชัดเจน เหมาะสำหรับแนบในรายงาน</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Voice Note & Remarks */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-medium text-slate-300">หมายเหตุ / รายละเอียดการตรวจ</label>
+            <button
+              type="button"
+              onClick={handleVoiceRecord}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold ${
+                isRecording ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+              }`}
+            >
+              <Mic className="w-3.5 h-3.5" />
+              <span>{isRecording ? "กำลังบันทึกเสียง..." : "บันทึกด้วยเสียง (AI Speech-to-Text)"}</span>
+            </button>
+          </div>
+          <textarea
+            rows={4}
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            placeholder="กรอกรายละเอียด หรือใช้ปุ่มบันทึกเสียงด้านบน..."
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+          ></textarea>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg text-sm"
+        >
+          บันทึกผลการตรวจเช็ค (Submit Inspection)
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ==========================================
+// MODULE 4: 13-TASK INSPECTION RECORDS
+// ==========================================
+function InspectionRecordsView({ t, rooms, onInspectRoom, showToast }) {
+  const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '101');
+  const activeRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+        <div>
+          <h2 className="font-bold text-base text-slate-100">ลำดับขั้นตอนการตรวจ 13 งาน (13-Task Inspection Timeline)</h2>
+          <p className="text-xs text-slate-400">ตรวจสอบความสมบูรณ์ในแต่ละขั้นตอนของห้องพัก</p>
+        </div>
+
+        {/* Room Switcher Dropdown */}
+        <select
+          value={selectedRoomId}
+          onChange={(e) => setSelectedRoomId(e.target.value)}
+          className="bg-slate-900 border border-slate-700 text-xs font-bold text-emerald-400 px-4 py-2 rounded-lg"
+        >
+          {rooms.map(r => (
+            <option key={r.id} value={r.id}>ห้อง {r.roomNumber} (ชั้น {r.floor})</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Task Grid Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {TASKS_13.map((task, idx) => {
+          const status = activeRoom.tasks[task] || 'pending';
+          return (
+            <div key={task} className="bg-slate-800/70 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between space-y-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-slate-900 text-emerald-400 font-bold text-xs flex items-center justify-center border border-slate-700">
+                    {idx + 1}
+                  </span>
+                  <span className="font-semibold text-xs text-slate-200">{task}</span>
+                </div>
+                <StatusBadge status={status} t={t} />
+              </div>
+
+              <div className="text-[11px] text-slate-400 space-y-1 bg-slate-900/40 p-2.5 rounded-lg">
+                <p>ผู้ตรวจล่าสุด: {activeRoom.lastInspector}</p>
+                <p>วันที่: {activeRoom.lastUpdate}</p>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-slate-700/60">
+                <button 
+                  onClick={() => showToast(`แสดงหลักฐานรูปถ่ายสำหรับงาน ${task}`)}
+                  className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>หลักฐานภาพถ่าย</span>
+                </button>
+                <button 
+                  onClick={() => showToast(`อัปเดตสถานะงาน ${task} เรียบร้อย`)}
+                  className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[10px]"
+                >
+                  เปลี่ยนสถานะ
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MODULE 5: DOCUMENT CENTER
+// ==========================================
+function DocumentCenterView({ t, showToast }) {
+  const [selectedDoc, setSelectedDoc] = useState(null);
+
+  const docs = [
+    { id: 1, name: "Inspection_Report_Floor_4_Q3.pdf", category: "Inspection Reports", size: "3.4 MB", date: "2026-10-20" },
+    { id: 2, name: "Defect_Summary_Boutique_Sukhumvit5.xlsx", category: "Defect Reports", size: "1.2 MB", date: "2026-10-22" },
+    { id: 3, name: "RI_Architectural_Specs_V2.pdf", category: "RI Documents", size: "8.9 MB", date: "2026-09-15" },
+    { id: 4, name: "Handover_Certificate_Floor_1-2.pdf", category: "Inspection Reports", size: "4.1 MB", date: "2026-10-24" }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+        <div>
+          <h2 className="font-bold text-base text-slate-100">ศูนย์เอกสารโครงการ (Document Hub)</h2>
+          <p className="text-xs text-slate-400">จัดเก็บเอกสารการตรวจรับ งานสถาปัตยกรรม และแบบแปลน</p>
+        </div>
+        <button 
+          onClick={() => showToast("เปิดหน้าต่างอัปโหลดเอกสารใหม่")}
+          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2"
+        >
+          <Upload className="w-4 h-4" />
+          <span>อัปโหลดเอกสาร</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {docs.map(doc => (
+          <div key={doc.id} className="bg-slate-800/70 border border-slate-700/80 p-4 rounded-xl flex flex-col justify-between">
+            <div className="flex items-start gap-3">
+              <FileText className="w-8 h-8 text-emerald-400 flex-shrink-0" />
+              <div>
+                <h4 className="font-semibold text-xs text-slate-200 line-clamp-2">{doc.name}</h4>
+                <span className="text-[10px] text-slate-400">{doc.category}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-[11px] text-slate-400">
+              <span>{doc.size}</span>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setSelectedDoc(doc)}
+                  className="p-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+                <button 
+                  onClick={() => showToast(`กำลังดาวน์โหลด ${doc.name}`)}
+                  className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Document Preview Modal */}
+      {selectedDoc && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-700 pb-3">
+              <h3 className="font-bold text-sm text-slate-100">{selectedDoc.name}</h3>
+              <button onClick={() => setSelectedDoc(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="h-48 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-700 text-slate-500 text-xs">
+              [ PDF / Excel Preview Viewer Placeholder ]
+            </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setPreviewDoc(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold">
-                Close
+              <button 
+                onClick={() => setSelectedDoc(null)}
+                className="px-4 py-2 bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg"
+              >
+                {t.common.close}
+              </button>
+              <button 
+                onClick={() => {
+                  showToast(`กำลังดาวน์โหลด ${selectedDoc.name}`);
+                  setSelectedDoc(null);
+                }}
+                className="px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg"
+              >
+                {t.common.export}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
+// ==========================================
+// MODULE 6: AI WORKBENCH ASSISTANT
+// ==========================================
+function AIAssistantView({ t, showToast }) {
+  const [aiReport, setAiReport] = useState(null);
+
+  const generateReport = () => {
+    showToast("AI กำลังประมวลผลสรุปรายงานโครงการ...");
+    setTimeout(() => {
+      setAiReport({
+        summary: "จากการวิเคราะห์ข้อมูล 216 ห้อง พบว่าความก้าวหน้าโดยรวมอยู่ที่ 74% โดยงาน Finishing Paint และ Tiling บนชั้น 4-5 อยู่ในเกณฑ์สมบูรณ์สูง แนะนำให้เพิ่มอัตรากำลังช่างประตูกระจกเพื่อเร่งรัดการส่งมอบชั้น 7-8",
+        topDefect: "งานทาสี Finish Paint 1 (พบรอยด่าง 18 จุด)",
+        handoverForecast: "คาดว่าจะพร้อมส่งมอบทั้งโครงการภายในวันที่ 15 พฤศจิกายน 2026"
+      });
+    }, 1500);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-emerald-950/60 to-slate-800 p-6 rounded-2xl border border-emerald-500/30 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-400/40">
+            <Bot className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg text-slate-100">AI Executive Workbench</h2>
+            <p className="text-xs text-slate-400">เครื่องมือวิเคราะห์อัจฉริยะ ตรวจจับ Defect อัตโนมัติและสรุปรายงานบริหาร</p>
+          </div>
+        </div>
+        <button 
+          onClick={generateReport}
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg"
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>สร้างรายงานสรุป AI (Generate Insights)</span>
+        </button>
+      </div>
+
+      {aiReport && (
+        <div className="bg-slate-800/90 border border-emerald-500/50 rounded-xl p-6 space-y-4 animate-fade-in">
+          <h3 className="font-bold text-sm text-emerald-400 flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            <span>ผลการวิเคราะห์ภาพรวมบริหาร (AI Summary Output)</span>
+          </h3>
+          <p className="text-xs text-slate-200 leading-relaxed bg-slate-900/60 p-4 rounded-lg border border-slate-700">
+            {aiReport.summary}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="p-3 bg-red-950/30 border border-red-500/30 rounded-lg">
+              <span className="text-red-400 font-bold block mb-1">จุดต้องแก้ไขด่วน (Top Defect Trade):</span>
+              <span className="text-slate-200">{aiReport.topDefect}</span>
+            </div>
+            <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-lg">
+              <span className="text-emerald-400 font-bold block mb-1">ประมาณการวันส่งมอบ (Forecast):</span>
+              <span className="text-slate-200">{aiReport.handoverForecast}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// MODULE 7: HANDOVER HEATMAP DASHBOARD
+// ==========================================
+function HandoverDashboardView({ t, rooms, onInspectRoom, showToast }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+        <div>
+          <h2 className="font-bold text-base text-slate-100">แผนผังสถานะการส่งมอบ (Building Handover Heatmap)</h2>
+          <p className="text-xs text-slate-400">ภาพรวม 8 ชั้น x 27 ห้องพัก (สีเขียว = พร้อมส่งมอบ / สีแดง = พบ Defect)</p>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => showToast("ส่งออกข้อมูล Handover เป็นไฟล์ PDF สำเร็จ")}
+            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <FilePdf className="w-4 h-4 text-red-400" />
+            <span>PDF Export</span>
+          </button>
+          <button 
+            onClick={() => showToast("ส่งออกข้อมูล Handover เป็นไฟล์ Excel สำเร็จ")}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Excel Export</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Heatmap Grid */}
+      <div className="bg-slate-800/70 border border-slate-700 p-6 rounded-xl space-y-4">
+        {[8, 7, 6, 5, 4, 3, 2, 1].map(floor => (
+          <div key={floor} className="flex items-center gap-3">
+            <span className="w-14 text-xs font-bold text-slate-300">ชั้น {floor}</span>
+            <div className="flex-1 grid grid-cols-27 gap-1">
+              {rooms.filter(r => r.floor === floor).map(room => (
+                <div
+                  key={room.id}
+                  onClick={() => onInspectRoom(room)}
+                  title={`ห้อง ${room.roomNumber}: ${room.status}`}
+                  className={`h-7 rounded cursor-pointer transition-all hover:scale-125 flex items-center justify-center text-[9px] font-bold ${
+                    room.status === 'ready' 
+                      ? 'bg-emerald-500 text-slate-950' 
+                      : room.status === 'defect' 
+                      ? 'bg-red-500 text-white animate-pulse' 
+                      : 'bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  {room.roomNumber.slice(-2)}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// STATUS BADGE UTILITY COMPONENT
+// ==========================================
+function StatusBadge({ status, t }) {
+  if (status === 'ready' || status === 'passed') {
+    return (
+      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+        {t.status.ready}
+      </span>
+    );
+  }
+  if (status === 'defect') {
+    return (
+      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+        {t.status.defect}
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+      {t.status.inProgress}
+    </span>
+  );
+}
+
+// ==========================================
+// ROOM DETAIL INSPECTION MODAL
+// ==========================================
+function RoomDetailModal({ room, t, onClose, onSave }) {
+  const [currentStatus, setCurrentStatus] = useState(room.status);
+  const [tasks, setTasks] = useState({ ...room.tasks });
+
+  const toggleTask = (task) => {
+    const nextStatus = tasks[task] === 'passed' ? 'defect' : 'passed';
+    setTasks({ ...tasks, [task]: nextStatus });
+  };
+
+  const handleSave = () => {
+    onSave({
+      ...room,
+      status: currentStatus,
+      tasks: tasks
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-slate-700 pb-4">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span>รายละเอียดห้องพัก {room.roomNumber}</span>
+              <span className="text-xs font-normal text-slate-400">({room.type})</span>
+            </h3>
+            <p className="text-xs text-slate-400">ชั้น {room.floor} • ผู้ตรวจล่าสุด: {room.lastInspector}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-700/50">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Change Overall Status */}
+        <div className="flex items-center justify-between bg-slate-900 p-3.5 rounded-xl border border-slate-700">
+          <span className="text-xs font-medium text-slate-300">สถานะหลักของห้อง (Overall Room Status):</span>
+          <select
+            value={currentStatus}
+            onChange={(e) => setCurrentStatus(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-bold text-emerald-400 focus:outline-none"
+          >
+            <option value="ready">พร้อมส่งมอบ (Ready)</option>
+            <option value="inProgress">กำลังดำเนินการ (In Progress)</option>
+            <option value="defect">พบข้อบกพร่อง (Defect)</option>
+          </select>
+        </div>
+
+        {/* 13 Tasks Checklist Toggles */}
+        <div>
+          <h4 className="text-xs font-bold text-slate-200 mb-2">สถานะงาน 13 รายการ (13-Task Inspection Checklist)</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {TASKS_13.map(tName => {
+              const isPassed = tasks[tName] === 'passed';
+              return (
+                <div 
+                  key={tName}
+                  onClick={() => toggleTask(tName)}
+                  className={`p-2.5 rounded-lg border cursor-pointer flex items-center justify-between text-xs transition-colors ${
+                    isPassed 
+                      ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
+                      : 'bg-red-950/30 border-red-500/40 text-red-300'
+                  }`}
+                >
+                  <span className="font-medium">{tName}</span>
+                  <span className="font-bold">{isPassed ? "PASSED" : "DEFECT"}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-semibold"
+          >
+            {t.common.close}
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg"
+          >
+            {t.common.save}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
