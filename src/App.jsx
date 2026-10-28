@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import roomPlanImage from './assets/room-plan-reference.jpg';
 import { 
   Building2, LayoutDashboard, Grid, ClipboardCheck, History, FolderKanban, 
   Bot, CheckCircle2, AlertTriangle, Clock, Search, 
@@ -16,7 +17,7 @@ const i18n = {
     siteEngineer: "นายธนโชค ซี. (Site Engineer)",
     nav: {
       dashboard: "แดชบอร์ดสรุปผล",
-      floorStatus: "สถานะรายชั้น",
+      floorStatus: "สถานะรายชั้นและการส่งมอบ",
       newInspection: "บันทึกการตรวจงาน",
       inspectionRecords: "ประวัติการตรวจ 13 งาน",
       documentCenter: "ศูนย์เอกสารโครงการ",
@@ -85,7 +86,7 @@ const i18n = {
     siteEngineer: "Tanachock C. (Site Engineer)",
     nav: {
       dashboard: "Executive Dashboard",
-      floorStatus: "Floor Grid Status",
+      floorStatus: "Floor & Handover Status",
       newInspection: "Room Inspection Form",
       inspectionRecords: "13-Task Timeline",
       documentCenter: "Document Hub",
@@ -148,6 +149,102 @@ const i18n = {
     }
   }
 };
+
+// Localize text nodes and common accessibility/placeholder labels throughout every view.
+const bilingualPairs = [
+  ["8 Floors • 216 Rooms", "8 ชั้น • 216 ห้อง"], ["Online • Site Active", "ออนไลน์ • กำลังปฏิบัติงาน"],
+  ["Room Inspection List", "รายการตรวจห้องพัก"], ["รายชื่อห้องพัก", "Room Inspection List"],
+  ["ประเภทห้อง", "Room Type"], ["ความคืบหน้า (13 งาน)", "Progress (13 Tasks)"], ["การจัดการ", "Actions"],
+  ["แสดงผล ", "Showing "], [" ห้อง", " rooms"], ["ชั้น ", "Floor "], ["ผังแสดงสถานะห้องพักรายชั้น", "Floor and Handover Status"],
+  ["คลิกที่ห้องพักเพื่อตรวจเช็คสถานะละเอียด", "Select a room to inspect its status and details"],
+  ["ทั้งหมด", "All"], ["ห้อง ", "Room "], ["ชั้น", "Floor"], ["Progress", "ความคืบหน้า"],
+  ["ฟอร์มบันทึกการตรวจงาน", "Room Inspection Form"], ["บันทึกผลการตรวจสอบ 13 งาน พร้อมระบบ AI ช่วยวิเคราะห์รูปภาพและบันทึกเสียง", "Record results for the 13 inspection tasks, with simulated image analysis and voice notes"],
+  ["เลือกห้องพัก", "Select Room"], ["รายการตรวจ (13 งาน)", "Inspection Item (13 Tasks)"], ["ผลการตรวจ", "Inspection Result"],
+  ["ชื่อผู้ตรวจงาน", "Inspector Name"], ["แนบภาพถ่ายหน้างาน", "Attach Site Photo"], ["รองรับ PNG, JPG พร้อม AI ประเมินคุณภาพภาพ", "PNG and JPG supported. Image quality check is simulated."],
+  ["ความคมชัด:", "Clarity:"], ["สถานะ:", "Status:"], ["ภาพมีความชัดเจน เหมาะสำหรับแนบในรายงาน", "Image is clear and suitable for the report"],
+  ["หมายเหตุ / รายละเอียดการตรวจ", "Remarks / Inspection Details"], ["บันทึกด้วยเสียง", "Voice Note"], ["กำลังบันทึกเสียง...", "Recording..."],
+  ["กรอกรายละเอียด หรือใช้ปุ่มบันทึกเสียงด้านบน...", "Enter details or use the voice note button above..."], ["บันทึกผลการตรวจเช็ค", "Submit Inspection Result"],
+  ["ลำดับขั้นตอนการตรวจ 13 งาน", "13-Task Inspection Timeline"], ["ตรวจสอบความสมบูรณ์ในแต่ละขั้นตอนของห้องพัก", "Review completion of each inspection task"],
+  ["บันทึกการตรวจล่าสุด", "Recent Inspection Records"], ["ผู้ตรวจล่าสุด:", "Last Inspector:"], ["วันที่:", "Date:"],
+  ["งานนี้ยังไม่มีหลักฐานภาพ", "No photo evidence is available for this task"], ["หลักฐานภาพถ่าย", "Photo Evidence"], ["เปลี่ยนสถานะ", "Change Status"],
+  ["ศูนย์เอกสารโครงการ", "Project Document Center"], ["จัดเก็บเอกสารการตรวจรับ งานสถาปัตยกรรม และแบบแปลน", "Store inspection, architectural, and plan documents"],
+  ["อัปโหลดเอกสาร", "Upload Document"], ["Uploaded documents", "เอกสารที่อัปโหลด"], ["หมวดหมู่:", "Category:"], ["ไฟล์ตัวอย่างสำหรับสาธิต", "Sample file for demonstration"],
+  ["เพิ่มเอกสาร ", "Added document "], [" แล้ว", " added"], ["ดาวน์โหลด ", "Downloaded "],
+  ["AI กำลังประมวลผลสรุปรายงานโครงการ...", "AI is preparing the project summary..."],
+  ["จากการวิเคราะห์ข้อมูล 216 ห้อง พบว่าความก้าวหน้าโดยรวมอยู่ที่ 74% โดยงาน Finishing Paint และ Tiling บนชั้น 4-5 อยู่ในเกณฑ์สมบูรณ์สูง แนะนำให้เพิ่มอัตรากำลังช่างประตูกระจกเพื่อเร่งรัดการส่งมอบชั้น 7-8", "Analysis of 216 rooms indicates 74% overall progress. Finishing paint and tiling on floors 4–5 are progressing well. Consider adding glass-door crews to accelerate handover on floors 7–8."],
+  ["งานทาสี Finish Paint 1 (พบรอยด่าง 18 จุด)", "Finish Paint 1 (18 blemishes found)"],
+  ["คาดว่าจะพร้อมส่งมอบทั้งโครงการภายในวันที่ 15 พฤศจิกายน 2026", "The project is forecast to be ready for handover by November 15, 2026"],
+  ["เครื่องมือวิเคราะห์อัจฉริยะ ตรวจจับ Defect อัตโนมัติและสรุปรายงานบริหาร", "Analysis tools for defect detection and executive project reports"],
+  ["สร้างรายงานสรุป AI", "Generate AI Summary"], ["ผลการวิเคราะห์ภาพรวมบริหาร", "Executive Analysis Summary"],
+  ["จุดต้องแก้ไขด่วน", "Top Defect Trade"], ["ประมาณการวันส่งมอบ", "Handover Forecast"],
+  ["แผนผังสถานะการส่งมอบ", "Building Handover Heatmap"], ["ภาพรวม 8 ชั้น x 27 ห้องพัก (สีเขียว = พร้อมส่งมอบ / สีแดง = พบ Defect)", "8 floors × 27 rooms (green = ready for handover / red = defect found)"],
+  ["ดาวน์โหลดรายงาน Excel (CSV) แล้ว", "Excel report (CSV) downloaded"], ["PDF Export", "ส่งออก PDF"], ["Excel Export", "ส่งออก Excel"],
+  ["พร้อมส่งมอบ", "Ready for Handover"], ["กำลังดำเนินการ", "In Progress"], ["มีข้อบกพร่อง", "Defect Found"],
+  ["รอดำเนินการ", "Pending"], ["ผ่านการตรวจ", "Passed"], ["ไม่ผ่าน", "Failed"],
+  ["ฉาบปูนผนัง", "Wall Plastering"], ["ฉาบสกิมโค้ต", "Skim Coat"], ["ปรับระดับพื้น", "Screed"], ["ทาสีรองพื้น", "Primer Paint"],
+  ["ทาสีจริงครั้งที่ 1", "Finish Paint 1"], ["ทาสีจริงครั้งที่ 2", "Finish Paint 2"], ["ปูกระเบื้องห้องน้ำ", "Bathroom Tiling"],
+  ["โครงฝ้าเพดาน", "Ceiling Frame"], ["แผ่นฝ้าเพดาน", "Ceiling Board"], ["ประตูหลัก", "Main Door"], ["ประตูห้องน้ำ", "Bathroom Door"],
+  ["ฉากกั้นอาบน้ำ", "Shower Screen"], ["บัวเชิงผนัง", "Skirting"],
+  ["Deluxe King", "ห้องดีลักซ์เตียงคิงไซส์"], ["Executive Suite", "ห้องเอ็กเซ็กคิวทีฟสวีท"], ["Standard Twin", "ห้องมาตรฐานเตียงคู่"], ["Corner Suite", "ห้องคอร์เนอร์สวีท"],
+  ["นายธนโชค ซี.", "Tanachock C."], ["passed", "ผ่าน"], ["defect", "พบข้อบกพร่อง"], ["inProgress", "กำลังดำเนินการ"], ["pending", "รอดำเนินการ"],
+  ["RI (Request for Inspection) Document", "เอกสาร RI (Request for Inspection)"],
+  ["Simulated AI verification checks file format and metadata only; it cannot confirm issuer authenticity.", "การตรวจจำลองด้วย AI ตรวจเฉพาะรูปแบบและข้อมูลไฟล์ ไม่สามารถยืนยันผู้ออกเอกสารได้"],
+  ["Checking…", "กำลังตรวจสอบ…"], ["Simulated AI: likely genuine RI · demo only", "AI จำลอง: เอกสาร RI มีแนวโน้มถูกต้อง · ใช้สาธิตเท่านั้น"],
+  ["Review required · filename does not identify an RI · simulation", "ต้องตรวจทาน · ชื่อไฟล์ไม่ระบุว่าเป็น RI · ผลจำลอง"], ["Verification failed · unsupported file · simulation", "ตรวจสอบไม่ผ่าน · ไฟล์ไม่รองรับ · ผลจำลอง"],
+  ["Room Plan Task Map", "แผนผังห้องพร้อมจุดงานตรวจ"], ["Attached floor plan · numbered markers show task locations", "แปลนที่แนบ · หมายเลขแสดงตำแหน่งงานตรวจ"],
+  ["Living", "ห้องนั่งเล่น"], ["Bedroom", "ห้องนอน"], ["Bathroom", "ห้องน้ำ"], ["Kitchen", "ครัว"], ["Entry", "ทางเข้า"],
+  ["Read-only room status", "สถานะห้อง (อ่านอย่างเดียว)"], ["Read-only checklist", "รายการตรวจ (อ่านอย่างเดียว)"],
+  ["Floor Progress", "ความคืบหน้ารายชั้น"], ["Floor Status", "สถานะรายชั้น"], ["Trade Defects", "ข้อบกพร่องแยกตามงาน"],
+  ["Missing Mix Valve", "วาล์วผสมน้ำหาย"], ["Plumbing Issue", "ปัญหาระบบประปา"], ["Ceiling Defect", "ฝ้าเพดานชำรุด"], ["Electrical Fault", "ระบบไฟฟ้าขัดข้อง"], ["Ceiling Board Crack", "ฝ้าเพดานแตกร้าว"], ["Shower Screen Gap", "ช่องว่างฉากกั้นอาบน้ำ"],
+  ["Checking status…", "กำลังตรวจสอบสถานะ…"], ["Verified (Simulated)", "ผ่านการตรวจจำลอง"], ["Review Required (Simulated)", "ต้องตรวจทาน (ผลจำลอง)"],
+  ["AI Executive Workbench", "พื้นที่วิเคราะห์สำหรับผู้บริหารด้วย AI"], ["AI Image Quality Score:", "คะแนนคุณภาพภาพจาก AI:"],
+  ["Quality:", "คุณภาพ:"], ["High Resolution", "ความละเอียดสูง"], ["Passed (No blur)", "ผ่าน (ภาพไม่เบลอ)"],
+  ["Defect Points", "จุดบกพร่อง"], ["Export Report", "ส่งออกรายงาน"], ["Date", "วันที่"], ["Floor", "ชั้น"],
+  ["Passed & Ready", "ผ่านและพร้อมส่งมอบ"], ["Active Defects", "ข้อบกพร่องที่ต้องแก้"], ["Pending Inspections", "รอการตรวจ"], ["ready", "พร้อมส่งมอบ"],
+  ["View Details", "ดูรายละเอียด"], ["Edit", "แก้ไข"], ["Close", "ปิด"], ["Save Changes", "บันทึกการเปลี่ยนแปลง"],
+  ["All", "ทั้งหมด"], ["Select Floor", "เลือกชั้น"], ["Trade", "หมวดหมู่งาน"], ["Inspector", "ผู้ตรวจงาน"],
+  ["Floor Grid Selector", "ตัวเลือกผังรายชั้น"], ["13-Task Inspection Checklist", "รายการตรวจ 13 งาน"], ["PASSED", "ผ่าน"], ["DEFECT", "พบข้อบกพร่อง"],
+  ["Room Status", "สถานะห้อง"], ["Handover", "การส่งมอบ"], ["Floor", "ชั้น"], ["Floor ", "ชั้น "],
+  ["Missing Valve", "วาล์วน้ำหาย"], ["Handover Forecast", "คาดการณ์ส่งมอบ"], ["Top Defect Trade", "งานที่มีข้อบกพร่องสูงสุด"],
+  ["Generate Insights", "สร้างข้อมูลเชิงลึก"], ["PDF / Excel Preview Viewer Placeholder", "พื้นที่ตัวอย่างแสดง PDF / Excel"],
+  ["PDF Export", "ส่งออก PDF"], ["Excel Export", "ส่งออก Excel"],
+  ["การแจ้งเตือนล่าสุด: ตรวจสอบห้อง 412 เรียบร้อย", "Latest notification: Room 412 was inspected"],
+  ["บันทึกผลตรวจห้อง ", "Saved inspection for Room "], [" สำเร็จ", " completed"],
+  ["อัปเดตข้อมูลห้อง ", "Updated Room "], ["แปลงเสียงเป็นข้อความสำเร็จ", "Voice transcription completed"],
+  ["สถานะหลักของห้อง", "Overall Room Status"], ["รายละเอียดห้องพัก", "Room Details"], ["ผู้ตรวจล่าสุด", "Last Inspector"],
+  ["บันทึกการตรวจล่าสุด", "Recent Inspection Records"], ["ลำดับขั้นตอนการตรวจ 13 งาน", "13-Task Inspection Timeline"],
+  ["ชั้น ", "Floor "], ["ห้องพัก", "Room"], ["ความคืบหน้า", "Progress"], ["รอการตรวจเช็ค", "Pending Inspection"],
+  ["สถานะการตรวจแยกตามชั้น", "Inspection Status by Floor"], ["สรุปผลการตรวจ", "Inspection Result Summary"], ["ห้องที่ต้องแก้ไขเร่งด่วน", "Critical Rooms"],
+  ["ยังไม่ส่งตรวจ", "Not Submitted"], ["รอตรวจ", "Ready for Inspection"], ["วาล์วน้ำหาย", "Missing Mix Valve"],
+  ["หมวดหมู่ช่าง", "Trade"], ["ศูนย์เอกสารโครงการ", "Project Document Center"], ["สถานะการส่งมอบห้องพัก", "Handover Status"],
+  ["Inspection Reports", "รายงานการตรวจ"], ["Defect Reports", "รายงานข้อบกพร่อง"], ["RI Documents", "เอกสาร RI"],
+  ["Upload Document", "อัปโหลดเอกสาร"], ["Room Plan with inspection task markers", "แผนผังห้องพร้อมจุดระบุตำแหน่งงานตรวจ"],
+  ["Room Details", "รายละเอียดห้อง"], ["Task", "รายการตรวจ"], ["AI Summary Output", "ผลสรุปจาก AI"], ["Executive Analysis Summary", "สรุปผลวิเคราะห์สำหรับผู้บริหาร"],
+  ["Recording...", "กำลังบันทึกเสียง..."], ["Voice Note", "บันทึกเสียง"], ["Room Status", "สถานะห้อง"],
+  ["สถานะ", "Status"], ["ดูรายละเอียดห้อง", "View Room Details"], ["สร้างรายงานสรุป AI (Generate Insights)", "Generate AI Summary"],
+  ["Tracking & Reporting Expert System", "ระบบติดตามและรายงานผลอัจฉริยะ"], ["Site Engineer", "วิศวกรประจำไซต์"],
+];
+
+const translateString = (value, lang) => {
+  const normalizedPairs = bilingualPairs.map(([first, second]) => /[\u0E00-\u0E7F]/.test(first) ? [first, second] : [second, first]);
+  const pairs = lang === 'en' ? normalizedPairs : normalizedPairs.map(([th, en]) => [en, th]);
+  return [...pairs].sort((a, b) => b[0].length - a[0].length).reduce((text, [source, target]) => text.replaceAll(source, target), value);
+};
+
+function LocalizedUI({ lang, children }) {
+  const localize = (node) => {
+    if (typeof node === 'string') return translateString(node, lang);
+    if (Array.isArray(node)) return node.map(localize);
+    if (!React.isValidElement(node)) return node;
+    const props = { ...node.props };
+    for (const key of ['placeholder', 'title', 'alt', 'aria-label']) {
+      if (typeof props[key] === 'string') props[key] = translateString(props[key], lang);
+    }
+    if (props.children !== undefined) props.children = localize(props.children);
+    return React.cloneElement(node, props);
+  };
+  return <>{localize(children)}</>;
+}
 
 // 13 Standard Construction Tasks
 const TASKS_13 = [
@@ -267,6 +364,7 @@ export default function App() {
   }, [rooms, searchQuery, selectedFloorFilter, selectedStatusFilter]);
 
   return (
+    <LocalizedUI lang={lang}>
     <div className="flex h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden">
       {/* Toast Alert Banner */}
       {toastMessage && (
@@ -310,7 +408,6 @@ export default function App() {
             { id: 'inspectionRecords', icon: History, label: t.nav.inspectionRecords },
             { id: 'documentCenter', icon: FolderKanban, label: t.nav.documentCenter },
             { id: 'aiAssistant', icon: Bot, label: t.nav.aiAssistant, badge: 'AI' },
-            { id: 'handover', icon: CheckCircle2, label: t.nav.handover }
           ].map(item => {
             const Icon = item.icon;
             const active = activeTab === item.id;
@@ -392,7 +489,7 @@ export default function App() {
         </header>
 
         {/* View Content Renderer */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto bg-[#f3f4f6] p-6">
           {activeTab === 'dashboard' && (
             <DashboardView 
               t={t} 
@@ -410,7 +507,10 @@ export default function App() {
               rooms={filteredRooms} 
               selectedFloor={selectedFloorFilter} 
               setSelectedFloor={setSelectedFloorFilter}
+              selectedStatusFilter={selectedStatusFilter}
+              setSelectedStatusFilter={setSelectedStatusFilter}
               onInspectRoom={(r) => setModalRoom(r)} 
+              handoverHeatmap={<HandoverDashboardView t={t} lang={lang} rooms={rooms} selectedFloor={selectedFloorFilter} selectedStatusFilter={selectedStatusFilter} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />}
             />
           )}
 
@@ -442,31 +542,13 @@ export default function App() {
             <AIAssistantView t={t} showToast={showToast} />
           )}
 
-          {activeTab === 'handover' && (
-            <HandoverDashboardView t={t} rooms={rooms} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
-          )}
         </main>
       </div>
 
       {/* --- GLOBAL ROOM INSPECTION MODAL --- */}
-      {modalRoom && (
-        <RoomDetailModal 
-          room={modalRoom} 
-          t={t} 
-          onClose={() => setModalRoom(null)}
-          onSave={(updated) => {
-            setRooms(current => current.map(r => r.id === updated.id ? {
-              ...updated,
-              progress: Math.round(Object.values(updated.tasks).filter(value => value === 'passed').length / TASKS_13.length * 100),
-              defectsCount: Object.values(updated.tasks).filter(value => value === 'defect').length,
-              lastUpdate: new Date().toLocaleString('th-TH'),
-            } : r));
-            showToast(lang === 'th' ? `อัปเดตข้อมูลห้อง ${updated.roomNumber} สำเร็จ` : `Room ${updated.roomNumber} updated successfully`);
-            setModalRoom(null);
-          }}
-        />
-      )}
+      {modalRoom && <RoomDetailModal room={modalRoom} t={t} onClose={() => setModalRoom(null)} />}
     </div>
+    </LocalizedUI>
   );
 }
 
@@ -612,7 +694,7 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
 // ==========================================
 // MODULE 2: FLOOR STATUS VIEW
 // ==========================================
-function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectRoom }) {
+function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, selectedStatusFilter, setSelectedStatusFilter, onInspectRoom, handoverHeatmap }) {
   const floors = [1, 2, 3, 4, 5, 6, 7, 8];
 
   const currentFloorRooms = useMemo(() => {
@@ -651,6 +733,13 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectR
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/70 p-3">
+        <span className="mr-1 text-xs font-semibold text-slate-300">{t.dashboard.resultSummary}:</span>
+        {[['all', t.common.filterAll], ['ready', t.dashboard.legend.passed], ['defect', t.dashboard.legend.failed], ['inProgress', t.dashboard.legend.ready], ['pending', t.dashboard.legend.pending]].map(([key, label]) => (
+          <button key={key} onClick={() => setSelectedStatusFilter(key)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${selectedStatusFilter === key ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}>{label}</button>
+        ))}
+      </div>
+
       {/* Grid Layout */}
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-3">
         {currentFloorRooms.map(room => (
@@ -670,6 +759,7 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectR
               {room.status === 'ready' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
               {room.status === 'defect' && <AlertTriangle className="w-4 h-4 text-red-400" />}
               {room.status === 'inProgress' && <Clock className="w-4 h-4 text-amber-400" />}
+              {room.status === 'pending' && <ClipboardCheck className="w-4 h-4 text-slate-400" />}
             </div>
 
             <div className="text-[10px] text-slate-400 truncate">{room.type}</div>
@@ -682,7 +772,7 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectR
               <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
                 <div 
                   className={`h-full ${
-                    room.status === 'ready' ? 'bg-emerald-500' : room.status === 'defect' ? 'bg-red-500' : 'bg-amber-500'
+                    room.status === 'ready' ? 'bg-emerald-500' : room.status === 'defect' ? 'bg-red-500' : room.status === 'pending' ? 'bg-slate-500' : 'bg-amber-500'
                   }`}
                   style={{ width: `${room.progress}%` }}
                 ></div>
@@ -691,6 +781,7 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectR
           </div>
         ))}
       </div>
+      {handoverHeatmap}
     </div>
   );
 }
@@ -704,13 +795,15 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
   const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.roomNumber || '101');
   const [taskName, setTaskName] = useState(TASKS_13[0]);
   const [status, setStatus] = useState('passed');
-  const [inspectorName, setInspectorName] = useState(rooms[0]?.lastInspector || '');
+  const [inspectorName, setInspectorName] = useState('');
   const [remarks, setRemarks] = useState('');
   
   // AI Simulation States
   const [photoPreview, setPhotoPreview] = useState(null);
   const [aiScore, setAiScore] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [riFile, setRiFile] = useState(null);
+  const [riVerification, setRiVerification] = useState('');
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
@@ -727,27 +820,42 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
     }
   };
 
+  const handleRiUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setRiFile(file);
+    setRiVerification('checking');
+    window.setTimeout(() => {
+      const supported = file.size > 0 && /application\/pdf|image\/(png|jpeg)/.test(file.type);
+      const filenameIdentifiesRi = /\bri\b|request.?for.?inspection/i.test(file.name);
+      setRiVerification(!supported ? 'simulated-fail' : filenameIdentifiesRi ? 'simulated-pass' : 'simulated-review');
+    }, 900);
+    event.target.value = '';
+  };
+
   const handleVoiceRecord = () => {
     setIsRecording(true);
     setTimeout(() => {
       setIsRecording(false);
-      setRemarks("การทาสี Finish Paint 1 พื้นผิวเรียบเนียน ไม่พบรอยด่างหรือรอยแปรง ตรวจสอบผ่าน");
-      showToast("แปลงเสียงเป็นข้อความสำเร็จ (Voice transcribed)");
+      setRemarks(lang === 'th' ? "การทาสี Finish Paint 1 พื้นผิวเรียบเนียน ไม่พบรอยด่างหรือรอยแปรง ตรวจสอบผ่าน" : "Finish Paint 1 is smooth, with no blemishes or brush marks. Inspection passed.");
+      showToast(lang === 'th' ? "แปลงเสียงเป็นข้อความสำเร็จ (Voice transcribed)" : "Voice transcription completed.");
     }, 2500);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmitInspection({ id: crypto.randomUUID(), roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoPreview });
+    onSubmitInspection({ id: crypto.randomUUID(), roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoPreview, riDocument: riFile ? { name: riFile.name, type: riFile.type, size: riFile.size, verification: riVerification } : null });
     setRemarks('');
     setPhotoPreview(null);
     setAiScore(null);
+    setRiFile(null);
+    setRiVerification('');
   };
 
   return (
     <div className="max-w-4xl mx-auto bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-100">{labels.inspectionTitle} (Room Inspection Form)</h2>
+        <h2 className="text-lg font-bold text-slate-100">{labels.inspectionTitle}</h2>
         <p className="text-xs text-slate-400">บันทึกผลการตรวจสอบ 13 งาน พร้อมระบบ AI ช่วยวิเคราะห์รูปภาพและบันทึกเสียง</p>
       </div>
 
@@ -786,9 +894,9 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
               onChange={(e) => setStatus(e.target.value)}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             >
-              <option value="passed">{labels.passed} (Passed)</option>
-              <option value="defect">{labels.defect} (Defect)</option>
-              <option value="inProgress">{labels.inProgress} (In Progress)</option>
+              <option value="passed">{labels.passed}</option>
+              <option value="defect">{labels.defect}</option>
+              <option value="inProgress">{labels.inProgress}</option>
             </select>
           </div>
           <div>
@@ -802,7 +910,7 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
           <input type="file" accept="image/*" onChange={handlePhotoUpload} id="photo-upload" className="hidden" />
           <label htmlFor="photo-upload" className="cursor-pointer flex flex-col items-center justify-center">
             <Camera className="w-8 h-8 text-emerald-400 mb-2" />
-            <span className="text-xs font-medium text-slate-200">{labels.photo} (Photo Upload)</span>
+            <span className="text-xs font-medium text-slate-200">{labels.photo}</span>
             <span className="text-[10px] text-slate-400">รองรับ PNG, JPG พร้อม AI ประเมินคุณภาพภาพ</span>
           </label>
 
@@ -821,6 +929,19 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
               )}
             </div>
           )}
+        </div>
+
+        <div className="rounded-xl border border-dashed border-slate-600 bg-slate-900/40 p-4">
+          <label htmlFor="ri-document" className="mb-2 block text-xs font-semibold text-slate-200">RI (Request for Inspection) Document</label>
+          <input id="ri-document" type="file" accept="application/pdf,image/png,image/jpeg" onChange={handleRiUpload} className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white" />
+          <p className="mt-2 text-[10px] text-amber-300">Simulated AI verification checks file format and metadata only; it cannot confirm issuer authenticity.</p>
+          {riFile && <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-300">{riFile.name}</span>
+            {riVerification === 'checking' && <span className="rounded-full bg-blue-500/20 px-2.5 py-1 font-semibold text-blue-300">Checking…</span>}
+            {riVerification === 'simulated-pass' && <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 font-semibold text-emerald-300">Simulated AI: likely genuine RI · demo only</span>}
+            {riVerification === 'simulated-review' && <span className="rounded-full bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-300">Review required · filename does not identify an RI · simulation</span>}
+            {riVerification === 'simulated-fail' && <span className="rounded-full bg-red-500/20 px-2.5 py-1 font-semibold text-red-300">Verification failed · unsupported file · simulation</span>}
+          </div>}
         </div>
 
         {/* Voice Note & Remarks */}
@@ -851,7 +972,7 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
           type="submit"
           className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg text-sm"
         >
-          {labels.submit} (Submit Inspection)
+          {labels.submit}
         </button>
       </form>
     </div>
@@ -924,7 +1045,7 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom, showToast }) 
                   onClick={() => onInspectRoom(activeRoom)}
                   className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[10px]"
                 >
-                  เปลี่ยนสถานะ
+                  ดูรายละเอียดห้อง
                 </button>
               </div>
             </div>
@@ -1115,9 +1236,11 @@ function AIAssistantView({ showToast }) {
 // ==========================================
 // MODULE 7: HANDOVER HEATMAP DASHBOARD
 // ==========================================
-function HandoverDashboardView({ rooms, onInspectRoom, showToast }) {
+function HandoverDashboardView({ rooms, selectedFloor = 'all', selectedStatusFilter = 'all', onInspectRoom, showToast }) {
+  const displayedRooms = rooms.filter(room => (selectedFloor === 'all' || room.floor.toString() === selectedFloor) && (selectedStatusFilter === 'all' || room.status === selectedStatusFilter));
+  const displayedFloors = selectedFloor === 'all' ? [8, 7, 6, 5, 4, 3, 2, 1] : [Number(selectedFloor)];
   const exportCsv = () => {
-    const rows = [['Room', 'Floor', 'Type', 'Status', 'Progress', 'Defects'], ...rooms.map(room => [room.roomNumber, room.floor, room.type, room.status, `${room.progress}%`, room.defectsCount])];
+    const rows = [['Room', 'Floor', 'Type', 'Status', 'Progress', 'Defects'], ...displayedRooms.map(room => [room.roomNumber, room.floor, room.type, room.status, `${room.progress}%`, room.defectsCount])];
     downloadFile(`\uFEFF${rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')}`, 'trex-handover-report.csv', 'text/csv;charset=utf-8');
     showToast('ดาวน์โหลดรายงาน Excel (CSV) แล้ว');
   };
@@ -1149,11 +1272,11 @@ function HandoverDashboardView({ rooms, onInspectRoom, showToast }) {
 
       {/* Heatmap Grid */}
       <div className="bg-slate-800/70 border border-slate-700 p-6 rounded-xl space-y-4">
-        {[8, 7, 6, 5, 4, 3, 2, 1].map(floor => (
+        {displayedFloors.map(floor => (
           <div key={floor} className="flex items-center gap-3">
             <span className="w-14 text-xs font-bold text-slate-300">ชั้น {floor}</span>
             <div className="flex-1 grid grid-cols-[repeat(27,minmax(0,1fr))] gap-1">
-              {rooms.filter(r => r.floor === floor).map(room => (
+              {displayedRooms.filter(r => r.floor === floor).map(room => (
                 <div
                   key={room.id}
                   onClick={() => onInspectRoom(room)}
@@ -1163,7 +1286,7 @@ function HandoverDashboardView({ rooms, onInspectRoom, showToast }) {
                       ? 'bg-emerald-500 text-slate-950' 
                       : room.status === 'defect' 
                       ? 'bg-red-500 text-white animate-pulse' 
-                      : 'bg-slate-700 text-slate-300'
+                      : room.status === 'pending' ? 'bg-slate-500 text-white' : 'bg-blue-500 text-white'
                   }`}
                 >
               {room.roomNumber.slice(-2)}
@@ -1195,6 +1318,9 @@ function StatusBadge({ status, t }) {
       </span>
     );
   }
+  if (status === 'pending') {
+    return <span className="rounded border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-[10px] font-bold text-slate-300">{t.status.pending}</span>;
+  }
   return (
     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
       {t.status.inProgress}
@@ -1205,26 +1331,33 @@ function StatusBadge({ status, t }) {
 // ==========================================
 // ROOM DETAIL INSPECTION MODAL
 // ==========================================
-function RoomDetailModal({ room, t, onClose, onSave }) {
-  const [currentStatus, setCurrentStatus] = useState(room.status);
-  const [tasks, setTasks] = useState({ ...room.tasks });
+const TASK_PLAN_POSITIONS = [
+  [15, 50], [85, 48], [72, 43], [80, 37], [84, 53], [65, 32], [30, 43],
+  [51, 38], [52, 53], [50, 11], [42, 40], [33, 35], [72, 86],
+];
 
-  const toggleTask = (task) => {
-    const nextStatus = tasks[task] === 'passed' ? 'defect' : 'passed';
-    setTasks({ ...tasks, [task]: nextStatus });
-  };
+function RoomPlan({ room, t }) {
+  const markerColor = (status) => status === 'passed' ? '#10b981' : status === 'defect' ? '#ef4444' : status === 'inProgress' ? '#f59e0b' : '#64748b';
+  return <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900 p-4">
+    <div><h4 className="text-sm font-bold text-slate-100">Room Plan Task Map</h4><p className="text-[10px] text-slate-400">Attached floor plan · numbered markers show task locations</p></div>
+    <div className="mx-auto max-h-[560px] max-w-[500px] overflow-hidden rounded-lg bg-white">
+      <div className="relative aspect-[408/454] w-full">
+        <img src={roomPlanImage} alt="Room plan with inspection task markers" className="absolute inset-0 h-full w-full object-contain" />
+        {TASKS_13.map((task, index) => {
+        const [x, y] = TASK_PLAN_POSITIONS[index];
+        const status = room.tasks?.[task] || 'pending';
+        return <span key={task} title={`${index + 1}. ${task}: ${status}`} className="absolute grid h-6 w-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[10px] font-extrabold text-white shadow-md" style={{ left: `${x}%`, top: `${y}%`, backgroundColor: markerColor(status) }}>{index + 1}</span>;
+      })}
+      </div>
+    </div>
+    <div className="flex flex-wrap gap-3 text-[10px] text-slate-400">{[['passed', '#10b981'], ['defect', '#ef4444'], ['inProgress', '#f59e0b'], ['pending', '#64748b']].map(([key, color]) => <span key={key} className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />{t.status[key]}</span>)}</div>
+  </section>;
+}
 
-  const handleSave = () => {
-    onSave({
-      ...room,
-      status: currentStatus,
-      tasks: tasks
-    });
-  };
-
+function RoomDetailModal({ room, t, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-5xl w-full p-6 space-y-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-700 pb-4">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1238,58 +1371,39 @@ function RoomDetailModal({ room, t, onClose, onSave }) {
           </button>
         </div>
 
-        {/* Change Overall Status */}
+        {/* Room data is read-only in this view. */}
         <div className="flex items-center justify-between bg-slate-900 p-3.5 rounded-xl border border-slate-700">
-          <span className="text-xs font-medium text-slate-300">สถานะหลักของห้อง (Overall Room Status):</span>
-          <select
-            value={currentStatus}
-            onChange={(e) => setCurrentStatus(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-bold text-emerald-400 focus:outline-none"
-          >
-            <option value="ready">พร้อมส่งมอบ (Ready)</option>
-            <option value="inProgress">กำลังดำเนินการ (In Progress)</option>
-            <option value="defect">พบข้อบกพร่อง (Defect)</option>
-          </select>
+          <span className="text-xs font-medium text-slate-300">สถานะหลักของห้อง (Overall Room Status)</span>
+          <StatusBadge status={room.status} t={t} />
         </div>
+
+        <RoomPlan room={room} t={t} />
 
         {/* 13 Tasks Checklist Toggles */}
         <div>
           <h4 className="text-xs font-bold text-slate-200 mb-2">สถานะงาน 13 รายการ (13-Task Inspection Checklist)</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {TASKS_13.map(tName => {
-              const isPassed = tasks[tName] === 'passed';
+              const taskStatus = room.tasks?.[tName] || 'pending';
+              const isPassed = taskStatus === 'passed';
               return (
-                <div 
+                <div
                   key={tName}
-                  onClick={() => toggleTask(tName)}
-                  className={`p-2.5 rounded-lg border cursor-pointer flex items-center justify-between text-xs transition-colors ${
+                  className={`p-2.5 rounded-lg border flex items-center justify-between text-xs ${
                     isPassed 
                       ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
-                      : 'bg-red-950/30 border-red-500/40 text-red-300'
+                      : taskStatus === 'defect' ? 'bg-red-950/30 border-red-500/40 text-red-300' : taskStatus === 'pending' ? 'bg-slate-900/40 border-slate-700 text-slate-300' : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
                   }`}
                 >
                   <span className="font-medium">{tName}</span>
-                  <span className="font-bold">{isPassed ? "PASSED" : "DEFECT"}</span>
+                  <StatusBadge status={taskStatus} t={t} />
                 </div>
               );
             })}
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-semibold"
-          >
-            {t.common.close}
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg"
-          >
-            {t.common.save}
-          </button>
-        </div>
+        <div className="flex justify-end border-t border-slate-700 pt-3"><button onClick={onClose} className="rounded-xl bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-600">{t.common.close}</button></div>
       </div>
     </div>
   );
