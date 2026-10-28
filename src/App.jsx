@@ -204,6 +204,8 @@ const bilingualPairs = [
   ["View Details", "ดูรายละเอียด"], ["Edit", "แก้ไข"], ["Close", "ปิด"], ["Save Changes", "บันทึกการเปลี่ยนแปลง"],
   ["All", "ทั้งหมด"], ["Select Floor", "เลือกชั้น"], ["Trade", "หมวดหมู่งาน"], ["Inspector", "ผู้ตรวจงาน"],
   ["Floor Grid Selector", "ตัวเลือกผังรายชั้น"], ["13-Task Inspection Checklist", "รายการตรวจ 13 งาน"], ["PASSED", "ผ่าน"], ["DEFECT", "พบข้อบกพร่อง"],
+  ["View Photos", "ดูรูปภาพ"], ["View RI Document", "ดูเอกสาร RI"], ["No photo evidence", "ไม่มีหลักฐานรูปภาพ"], ["No RI document", "ไม่มีเอกสาร RI"],
+  ["Evidence Preview", "ตัวอย่างหลักฐาน"], ["Evidence file is unavailable", "ไม่พบไฟล์หลักฐาน"], ["Open or download file", "เปิดหรือดาวน์โหลดไฟล์"], ["Close preview", "ปิดตัวอย่าง"],
   ["Room Status", "สถานะห้อง"], ["Handover", "การส่งมอบ"], ["Floor", "ชั้น"], ["Floor ", "ชั้น "],
   ["Missing Valve", "วาล์วน้ำหาย"], ["Handover Forecast", "คาดการณ์ส่งมอบ"], ["Top Defect Trade", "งานที่มีข้อบกพร่องสูงสุด"],
   ["Generate Insights", "สร้างข้อมูลเชิงลึก"], ["PDF / Excel Preview Viewer Placeholder", "พื้นที่ตัวอย่างแสดง PDF / Excel"],
@@ -264,6 +266,42 @@ function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+const EVIDENCE_DB_NAME = 'trex-inspection-evidence';
+const EVIDENCE_STORE_NAME = 'records';
+function openEvidenceDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) return reject(new Error('IndexedDB is unavailable'));
+    const request = window.indexedDB.open(EVIDENCE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(EVIDENCE_STORE_NAME)) request.result.createObjectStore(EVIDENCE_STORE_NAME, { keyPath: 'id' });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Could not open evidence storage'));
+  });
+}
+
+async function storeInspectionEvidence(recordId, evidence) {
+  if (!evidence?.photo && !evidence?.ri) return;
+  const db = await openEvidenceDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
+    transaction.objectStore(EVIDENCE_STORE_NAME).put({ id: recordId, photo: evidence.photo || null, ri: evidence.ri || null });
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not save evidence')); };
+    transaction.onabort = () => { const error = transaction.error; db.close(); reject(error || new Error('Evidence save was cancelled')); };
+  });
+}
+
+async function loadInspectionEvidence(recordId, kind) {
+  const db = await openEvidenceDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readonly');
+    const request = transaction.objectStore(EVIDENCE_STORE_NAME).get(recordId);
+    request.onsuccess = () => { const value = request.result?.[kind] || null; db.close(); resolve(value); };
+    request.onerror = () => { const error = request.error; db.close(); reject(error || new Error('Could not load evidence')); };
+  });
 }
 
 // Generate Initial Sample Data for 8 Floors x 27 Rooms = 216 Rooms
@@ -489,7 +527,7 @@ export default function App() {
         </header>
 
         {/* View Content Renderer */}
-        <main className="flex-1 overflow-y-auto bg-[#f3f4f6] p-6">
+        <main className="flex-1 overflow-y-auto bg-[#0B132B] p-6">
           {activeTab === 'dashboard' && (
             <DashboardView 
               t={t} 
@@ -515,7 +553,13 @@ export default function App() {
           )}
 
           {activeTab === 'newInspection' && (
-            <RoomInspectionFormView t={t} lang={lang} showToast={showToast} rooms={rooms} onSubmitInspection={(record) => {
+            <RoomInspectionFormView t={t} lang={lang} showToast={showToast} rooms={rooms} onSubmitInspection={async (record, evidence) => {
+              try {
+                await storeInspectionEvidence(record.id, evidence);
+              } catch (error) {
+                console.error('Unable to persist inspection evidence:', error);
+                showToast(lang === 'th' ? 'บันทึกข้อมูลตรวจแล้ว แต่จัดเก็บไฟล์หลักฐานไม่สำเร็จ' : 'Inspection was saved, but the evidence file could not be stored.');
+              }
               const nextRecords = [record, ...inspectionRecords];
               setInspectionRecords(nextRecords);
               setRooms(current => current.map(room => {
@@ -546,7 +590,7 @@ export default function App() {
       </div>
 
       {/* --- GLOBAL ROOM INSPECTION MODAL --- */}
-      {modalRoom && <RoomDetailModal room={modalRoom} t={t} onClose={() => setModalRoom(null)} />}
+      {modalRoom && <RoomDetailModal room={modalRoom} t={t} lang={lang} records={inspectionRecords} showToast={showToast} onClose={() => setModalRoom(null)} />}
     </div>
     </LocalizedUI>
   );
@@ -575,10 +619,10 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
   const onStatusSelect = (key) => setSelectedStatusFilter(key === 'ready' ? 'ready' : key);
 
   return (
-    <div className="-m-6 min-h-full space-y-4 bg-[#f3f4f6] p-4 text-slate-800 sm:p-5">
+    <div className="-m-6 min-h-full space-y-4 bg-[#0B132B] p-4 text-slate-100 sm:p-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="m-0 text-xl font-bold tracking-normal text-slate-800">{t.dashboard.title}</h1><p className="mt-1 text-xs text-slate-500">{t.dashboard.projectSubtitle}</p></div>
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700">● {t.dashboard.liveSync}</span>
+        <div><h1 className="m-0 text-xl font-bold tracking-normal text-slate-100">{t.dashboard.title}</h1><p className="mt-1 text-xs text-slate-400">{t.dashboard.projectSubtitle}</p></div>
+        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">● {t.dashboard.liveSync}</span>
       </header>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -590,15 +634,15 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
           { label: t.dashboard.notSubmitted, value: stats.pending, filter: 'pending', color: '#9aa3af', icon: ClipboardCheck },
         ].map(card => {
           const Icon = card.icon;
-          return <button key={card.label} onClick={() => setSelectedStatusFilter(card.filter)} className="flex min-h-20 items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderLeft: `3px solid ${card.color}` }}>
-            <div><div className="text-[11px] font-medium text-slate-500">{card.label}</div><div className="mt-1 text-2xl font-bold leading-none" style={{ color: card.color }}>{card.value}</div></div><Icon className="h-5 w-5" style={{ color: card.color }} />
+          return <button key={card.label} onClick={() => setSelectedStatusFilter(card.filter)} className="flex min-h-20 items-center justify-between rounded-lg border border-slate-700 bg-[#1C2541] px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-500 hover:shadow-md" style={{ borderLeft: `3px solid ${card.color}` }}>
+            <div><div className="text-[11px] font-medium text-slate-300">{card.label}</div><div className="mt-1 text-2xl font-bold leading-none" style={{ color: card.color }}>{card.value}</div></div><Icon className="h-5 w-5" style={{ color: card.color }} />
           </button>;
         })}
       </section>
 
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">{t.dashboard.floorStatus}</h2>
+        <div className="rounded-lg border border-slate-700 bg-[#1C2541] p-4 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-slate-100">{t.dashboard.floorStatus}</h2>
           {chartMode === 'floor' ? <>
             <div className="w-full overflow-x-auto"><svg viewBox="0 0 760 190" role="img" aria-label={t.dashboard.floorStatus} className="h-48 min-w-[620px] w-full">
               {[0, 7, 14, 21, 28].map(tick => { const y = 155 - tick * 4.7; return <g key={tick}><line x1="48" x2="748" y1={y} y2={y} stroke="#e6e9ee" strokeDasharray="2 3"/><text x="39" y={y + 4} textAnchor="end" fill="#8791a0" fontSize="10">{tick}</text></g>; })}
@@ -617,35 +661,35 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
               })}
               <line x1="48" x2="748" y1="155" y2="155" stroke="#9aa3af"/>
             </svg></div>
-            <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-2 text-[10px]">{statusCounts.map(item => <span key={item.key} className="inline-flex items-center gap-1.5 text-slate-500"><i className="h-2 w-2 rounded-sm" style={{ background: item.color }} />{item.label}</span>)}</div>
-          </> : <div className="grid grid-cols-2 gap-3 py-4 sm:grid-cols-4">{TASKS_13.slice(0, 4).map(task => { const count = rooms.reduce((sum, room) => sum + (room.tasks?.[task] === 'defect' ? 1 : 0), 0); return <div key={task} className="rounded-md border border-slate-200 bg-slate-50 p-3"><div className="text-xs text-slate-500">{task}</div><div className="mt-2 text-lg font-bold text-rose-600">{count} {t.dashboard.failed}</div></div>; })}</div>}
-          <div className="mt-3 flex justify-end gap-1"><button onClick={() => setChartMode('floor')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'floor' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>Floor Status</button><button onClick={() => setChartMode('trade')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'trade' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>Trade Defects</button></div>
+            <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-2 text-[10px]">{statusCounts.map(item => <span key={item.key} className="inline-flex items-center gap-1.5 text-slate-300"><i className="h-2 w-2 rounded-sm" style={{ background: item.color }} />{item.label}</span>)}</div>
+          </> : <div className="grid grid-cols-2 gap-3 py-4 sm:grid-cols-4">{TASKS_13.slice(0, 4).map(task => { const count = rooms.reduce((sum, room) => sum + (room.tasks?.[task] === 'defect' ? 1 : 0), 0); return <div key={task} className="rounded-md border border-slate-700 bg-[#111b34] p-3"><div className="text-xs text-slate-300">{task}</div><div className="mt-2 text-lg font-bold text-rose-400">{count} {t.dashboard.failed}</div></div>; })}</div>}
+          <div className="mt-3 flex justify-end gap-1"><button onClick={() => setChartMode('floor')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'floor' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Floor Status</button><button onClick={() => setChartMode('trade')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'trade' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Trade Defects</button></div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-700">{t.dashboard.resultSummary}</h2>
-          <div className="my-3 flex justify-center"><div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: `conic-gradient(${donutGradient})` }}><div className="grid h-16 w-16 place-items-center rounded-full bg-white text-xs font-bold text-slate-600">{stats.total}</div></div></div>
-          <div className="space-y-1.5">{statusCounts.map(item => <button key={item.key} onClick={() => onStatusSelect(item.key)} className="flex w-full items-center justify-between gap-2 text-left text-[10px] text-slate-600 hover:text-slate-900"><span className="flex min-w-0 items-center gap-1.5"><i className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.color }} /><span className="truncate">{item.label}</span></span><b className="text-slate-800">{item.value}</b></button>)}</div>
+        <div className="rounded-lg border border-slate-700 bg-[#1C2541] p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-100">{t.dashboard.resultSummary}</h2>
+          <div className="my-3 flex justify-center"><div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: `conic-gradient(${donutGradient})` }}><div className="grid h-16 w-16 place-items-center rounded-full bg-[#0B132B] text-xs font-bold text-slate-200">{stats.total}</div></div></div>
+          <div className="space-y-1.5">{statusCounts.map(item => <button key={item.key} onClick={() => onStatusSelect(item.key)} className="flex w-full items-center justify-between gap-2 text-left text-[10px] text-slate-300 hover:text-white"><span className="flex min-w-0 items-center gap-1.5"><i className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.color }} /><span className="truncate">{item.label}</span></span><b className="text-slate-100">{item.value}</b></button>)}</div>
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700"><AlertTriangle className="h-4 w-4 text-rose-500" />{t.dashboard.criticalRooms}</h2>
+      <section className="rounded-lg border border-slate-700 bg-[#1C2541] p-4 shadow-sm">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-100"><AlertTriangle className="h-4 w-4 text-rose-400" />{t.dashboard.criticalRooms}</h2>
         {criticalRooms.length ? <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">{criticalRooms.map((room, index) => {
           const task = TASKS_13.find(name => room.tasks?.[name] === 'defect');
-          return <button key={room.id} onClick={() => onInspectRoom(room)} className="flex items-center gap-2 rounded-md border border-rose-100 bg-rose-50 p-2 text-left transition hover:border-rose-300"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-rose-600 text-[10px] font-bold text-white">{room.roomNumber}</span><span className="min-w-0"><b className="block text-[10px] text-slate-700">{t.dashboard.room} {room.roomNumber}</b><small className="block truncate text-[9px] text-rose-600">{t.dashboard.defects[index % t.dashboard.defects.length]}{task ? ` · ${task}` : ''}</small></span></button>;
+          return <button key={room.id} onClick={() => onInspectRoom(room)} className="flex items-center gap-2 rounded-md border border-rose-900/70 bg-rose-950/30 p-2 text-left transition hover:border-rose-700"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-rose-600 text-[10px] font-bold text-white">{room.roomNumber}</span><span className="min-w-0"><b className="block text-[10px] text-slate-100">{t.dashboard.room} {room.roomNumber}</b><small className="block truncate text-[9px] text-rose-300">{t.dashboard.defects[index % t.dashboard.defects.length]}{task ? ` · ${task}` : ''}</small></span></button>;
         })}</div> : <p className="text-xs text-slate-500">{t.dashboard.failed}: 0</p>}
       </section>
 
       {/* Preserve the existing quick inspection list below the reference dashboard panels. */}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="p-4 border-b border-slate-700/80 flex items-center justify-between">
-          <h3 className="font-semibold text-sm text-slate-700">รายชื่อห้องพัก (Room Inspection List)</h3>
-          <span className="text-xs text-slate-500">แสดงผล {visibleRooms.length} ห้อง</span>
+      <div className="overflow-hidden rounded-lg border border-slate-700 bg-[#1C2541] shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-700/80 p-4">
+          <h3 className="text-sm font-semibold text-slate-100">รายชื่อห้องพัก (Room Inspection List)</h3>
+          <span className="text-xs text-slate-400">แสดงผล {visibleRooms.length} ห้อง</span>
         </div>
         <div className="overflow-x-auto max-h-96">
           <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-slate-100 text-[11px] uppercase text-slate-500">
+            <thead className="sticky top-0 bg-[#101a33] text-[11px] uppercase text-slate-300">
               <tr>
                 <th className="p-3 pl-4">ห้องพัก</th>
                 <th className="p-3">ประเภทห้อง</th>
@@ -655,15 +699,15 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
                 <th className="p-3 text-right pr-4">การจัดการ</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-xs text-slate-600">
+            <tbody className="divide-y divide-slate-700/70 text-xs text-slate-300">
               {visibleRooms.slice(0, 15).map(room => (
-                <tr key={room.id} className="transition-colors hover:bg-slate-50">
-                  <td className="p-3 pl-4 font-bold text-emerald-700">{room.roomNumber}</td>
+                <tr key={room.id} className="transition-colors hover:bg-slate-700/50">
+                  <td className="p-3 pl-4 font-bold text-emerald-300">{room.roomNumber}</td>
                   <td className="p-3">{room.type}</td>
                   <td className="p-3">ชั้น {room.floor}</td>
                   <td className="p-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-24 rounded-full bg-slate-100 h-2">
+                      <div className="w-24 h-2 rounded-full bg-slate-900">
                         <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${room.progress}%` }}></div>
                       </div>
                       <span className="text-[10px] text-slate-400">{room.progress}%</span>
@@ -675,7 +719,7 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
                   <td className="p-3 text-right pr-4">
                     <button 
                       onClick={() => onInspectRoom(room)}
-                      className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200"
+                      className="inline-flex items-center gap-1 rounded bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700"
                     >
                       <Eye className="w-3 h-3 text-emerald-400" />
                       <span>{t.common.details}</span>
@@ -800,6 +844,7 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
   
   // AI Simulation States
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
   const [aiScore, setAiScore] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [riFile, setRiFile] = useState(null);
@@ -808,6 +853,8 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+      setPhotoFile(file);
       setPhotoPreview(URL.createObjectURL(file));
       // Simulate AI analysis
       setTimeout(() => {
@@ -844,9 +891,12 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmitInspection({ id: crypto.randomUUID(), roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoPreview, riDocument: riFile ? { name: riFile.name, type: riFile.type, size: riFile.size, verification: riVerification } : null });
+    const id = crypto.randomUUID();
+    onSubmitInspection({ id, roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: riFile ? { name: riFile.name, type: riFile.type, size: riFile.size, verification: riVerification } : null }, { photo: photoFile, ri: riFile });
     setRemarks('');
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
+    setPhotoFile(null);
     setAiScore(null);
     setRiFile(null);
     setRiVerification('');
@@ -1340,7 +1390,7 @@ function RoomPlan({ room, t }) {
   const markerColor = (status) => status === 'passed' ? '#10b981' : status === 'defect' ? '#ef4444' : status === 'inProgress' ? '#f59e0b' : '#64748b';
   return <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900 p-4">
     <div><h4 className="text-sm font-bold text-slate-100">Room Plan Task Map</h4><p className="text-[10px] text-slate-400">Attached floor plan · numbered markers show task locations</p></div>
-    <div className="mx-auto max-h-[560px] max-w-[500px] overflow-hidden rounded-lg bg-white">
+    <div className="mx-auto max-h-[560px] max-w-[500px] overflow-hidden rounded-lg bg-slate-900">
       <div className="relative aspect-[408/454] w-full">
         <img src={roomPlanImage} alt="Room plan with inspection task markers" className="absolute inset-0 h-full w-full object-contain" />
         {TASKS_13.map((task, index) => {
@@ -1354,7 +1404,33 @@ function RoomPlan({ room, t }) {
   </section>;
 }
 
-function RoomDetailModal({ room, t, onClose }) {
+function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
+  const [evidencePreview, setEvidencePreview] = useState(null);
+  const [loadingEvidence, setLoadingEvidence] = useState('');
+  useEffect(() => () => {
+    if (evidencePreview?.ownedUrl) URL.revokeObjectURL(evidencePreview.url);
+  }, [evidencePreview]);
+
+  const openEvidence = async (record, kind) => {
+    const key = `${record.id}:${kind}`;
+    setLoadingEvidence(key);
+    try {
+      const blob = await loadInspectionEvidence(record.id, kind);
+      if (!blob) {
+        showToast?.(lang === 'th' ? 'ไม่พบไฟล์หลักฐาน' : 'Evidence file is unavailable');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const metadata = kind === 'photo' ? record.photo : record.riDocument;
+      setEvidencePreview({ url, type: blob.type || metadata?.type || '', name: metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document'), kind, ownedUrl: true });
+    } catch (error) {
+      console.error('Unable to open inspection evidence:', error);
+      showToast?.(lang === 'th' ? 'ไม่สามารถเปิดไฟล์หลักฐานได้' : 'Could not open the evidence file');
+    } finally {
+      setLoadingEvidence('');
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-5xl w-full p-6 space-y-5 shadow-2xl max-h-[92vh] overflow-y-auto">
@@ -1383,20 +1459,29 @@ function RoomDetailModal({ room, t, onClose }) {
         <div>
           <h4 className="text-xs font-bold text-slate-200 mb-2">สถานะงาน 13 รายการ (13-Task Inspection Checklist)</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {TASKS_13.map(tName => {
+            {TASKS_13.map((tName, index) => {
               const taskStatus = room.tasks?.[tName] || 'pending';
               const isPassed = taskStatus === 'passed';
+              const taskRecords = records.filter(record => String(record.roomNumber) === String(room.roomNumber) && record.task === tName);
+              const photoRecord = taskRecords.find(record => record.photo);
+              const riRecord = taskRecords.find(record => record.riDocument);
               return (
                 <div
                   key={tName}
-                  className={`p-2.5 rounded-lg border flex items-center justify-between text-xs ${
+                  className={`p-2.5 rounded-lg border text-xs ${
                     isPassed 
                       ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
                       : taskStatus === 'defect' ? 'bg-red-950/30 border-red-500/40 text-red-300' : taskStatus === 'pending' ? 'bg-slate-900/40 border-slate-700 text-slate-300' : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
                   }`}
                 >
-                  <span className="font-medium">{tName}</span>
-                  <StatusBadge status={taskStatus} t={t} />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium"><span className="mr-1 font-bold">{index + 1}.</span>{tName}</span>
+                    <StatusBadge status={taskStatus} t={t} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" disabled={!photoRecord || loadingEvidence === `${photoRecord?.id}:photo`} onClick={() => photoRecord && openEvidence(photoRecord, 'photo')} className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-semibold text-sky-300 enabled:hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={photoRecord ? 'View Photos' : 'No photo evidence'}><Eye className="h-3 w-3" />View Photos</button>
+                    <button type="button" disabled={!riRecord || loadingEvidence === `${riRecord?.id}:ri`} onClick={() => riRecord && openEvidence(riRecord, 'ri')} className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300 enabled:hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={riRecord ? 'View RI Document' : 'No RI document'}><FileText className="h-3 w-3" />View RI Document</button>
+                  </div>
                 </div>
               );
             })}
@@ -1405,6 +1490,15 @@ function RoomDetailModal({ room, t, onClose }) {
 
         <div className="flex justify-end border-t border-slate-700 pt-3"><button onClick={onClose} className="rounded-xl bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-600">{t.common.close}</button></div>
       </div>
+      {evidencePreview && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4" onClick={() => setEvidencePreview(null)}>
+        <section role="dialog" aria-modal="true" aria-label="Evidence Preview" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl" onClick={event => event.stopPropagation()}>
+          <header className="flex items-center justify-between gap-3 border-b border-slate-700 px-4 py-3"><div className="min-w-0"><h3 className="text-sm font-bold text-slate-100">Evidence Preview</h3><p className="truncate text-xs text-slate-400">{evidencePreview.name}</p></div><button type="button" onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-800 p-2 text-slate-300 hover:bg-slate-700" aria-label="Close preview"><X className="h-4 w-4" /></button></header>
+          <div className="min-h-0 flex-1 overflow-auto bg-slate-950 p-3">
+            {evidencePreview.type.startsWith('image/') ? <img src={evidencePreview.url} alt={evidencePreview.name} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.type === 'application/pdf' || evidencePreview.name.toLowerCase().endsWith('.pdf') ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : <div className="grid h-48 place-items-center text-center"><div><FileText className="mx-auto mb-2 h-8 w-8 text-slate-400" /><a href={evidencePreview.url} download={evidencePreview.name} className="text-sm font-semibold text-sky-300 underline">Open or download file</a></div></div>}
+          </div>
+          <footer className="flex justify-end border-t border-slate-700 px-4 py-3"><a href={evidencePreview.url} download={evidencePreview.name} target="_blank" rel="noreferrer" className="mr-auto self-center text-xs text-sky-300 underline">Open or download file</a><button onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-600">{t.common.close}</button></footer>
+        </section>
+      </div>}
     </div>
   );
 }
