@@ -29,6 +29,29 @@ const i18n = {
       defectsFound: "พบข้อบกพร่อง (Defects)",
       pendingInspection: "รอการตรวจเช็ค"
     },
+    dashboard: {
+      title: "Dashboard",
+      projectSubtitle: "Boutique Bangkok Sukhumvit 5 · Hotel Project",
+      liveSync: "ซิงก์ข้อมูลสด | อัปเดตล่าสุด: ตอนนี้",
+      totalRooms: "ห้องพักทั้งหมด",
+      passed: "ผ่านการตรวจ",
+      failed: "ไม่ผ่าน",
+      readyForInspection: "รอตรวจ",
+      notSubmitted: "ยังไม่ส่งตรวจ",
+      floorStatus: "สถานะการตรวจแยกตามชั้น",
+      resultSummary: "สรุปผลการตรวจ",
+      criticalRooms: "ห้องที่ต้องแก้ไขเร่งด่วน",
+      room: "ห้อง",
+      legend: { passed: "ผ่าน", failed: "ไม่ผ่าน", ready: "รอตรวจ", pending: "ยังไม่ส่งตรวจ" },
+      defects: ["วาล์วน้ำหาย", "ปัญหาระบบประปา", "ฝ้าเพดานชำรุด", "ระบบไฟฟ้าขัดข้อง", "ฝ้าแตกร้าว", "ขอบฉากกั้นอาบน้ำมีช่องว่าง"]
+    },
+    form: {
+      room: "เลือกห้องพัก", task: "รายการตรวจ (13 งาน)", result: "ผลการตรวจ", inspector: "ชื่อผู้ตรวจงาน",
+      passed: "ผ่าน", defect: "พบข้อบกพร่อง", inProgress: "รอตรวจ/กำลังแก้ไข",
+      roomOption: (room, floor) => `ห้อง ${room} (ชั้น ${floor})`,
+      inspectionTitle: "ฟอร์มบันทึกการตรวจงาน", photo: "แนบภาพถ่ายหน้างาน", remarks: "หมายเหตุ / รายละเอียดการตรวจ",
+      voice: "บันทึกเสียง", recording: "กำลังบันทึกเสียง...", submit: "บันทึกผลการตรวจ"
+    },
     status: {
       ready: "พร้อมส่งมอบ",
       inProgress: "กำลังดำเนินการ",
@@ -75,6 +98,29 @@ const i18n = {
       defectsFound: "Active Defects",
       pendingInspection: "Pending Inspections"
     },
+    dashboard: {
+      title: "Dashboard",
+      projectSubtitle: "Boutique Bangkok Sukhumvit 5 · Hotel Project",
+      liveSync: "Live Sync | Last updated: Just now",
+      totalRooms: "Total Rooms",
+      passed: "Passed Rooms",
+      failed: "Failed Rooms",
+      readyForInspection: "Ready for Inspection",
+      notSubmitted: "Not Submitted",
+      floorStatus: "Inspection Status by Floor",
+      resultSummary: "Inspection Result Summary",
+      criticalRooms: "Critical Rooms",
+      room: "Room",
+      legend: { passed: "Passed", failed: "Failed", ready: "Ready for Inspection", pending: "Not Submitted" },
+      defects: ["Missing Mix Valve", "Plumbing Issue", "Ceiling Defect", "Electrical Fault", "Ceiling Board Crack", "Shower Screen Gap"]
+    },
+    form: {
+      room: "Select Room", task: "Inspection Item (13 Tasks)", result: "Inspection Result", inspector: "Inspector Name",
+      passed: "Passed", defect: "Defect Found", inProgress: "Ready / In Progress",
+      roomOption: (room, floor) => `Room ${room} (Floor ${floor})`,
+      inspectionTitle: "Room Inspection Form", photo: "Attach Site Photo", remarks: "Remarks / Inspection Details",
+      voice: "Voice Note", recording: "Recording...", submit: "Submit Inspection Result"
+    },
     status: {
       ready: "Ready for Handover",
       inProgress: "In Progress",
@@ -109,6 +155,10 @@ const TASKS_13 = [
   "Finish Paint 1", "Finish Paint 2", "Bathroom Tiling", "Ceiling Frame", 
   "Ceiling Board", "Main Door", "Bathroom Door", "Shower Screen", "Skirting"
 ];
+const TASKS_13_TH = [
+  "ฉาบปูนผนัง", "ฉาบสกิมโค้ต", "ปรับระดับพื้น", "ทาสีรองพื้น", "ทาสีจริงครั้งที่ 1", "ทาสีจริงครั้งที่ 2",
+  "ปูกระเบื้องห้องน้ำ", "โครงฝ้าเพดาน", "แผ่นฝ้าเพดาน", "ประตูหลัก", "ประตูห้องน้ำ", "ฉากกั้นอาบน้ำ", "บัวเชิงผนัง"
+];
 
 function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -131,9 +181,12 @@ const generateRoomsData = () => {
       
       // Seed a believable construction sequence: lower floors are further along.
       const completedTasks = Math.max(0, Math.min(13, Math.round(1 + floor * 1.35 + ((r * 7 + floor * 3) % 7) - 3)));
+      const notSubmitted = (r + floor * 2) % 6 === 0;
       const tasksStatus = {};
       TASKS_13.forEach((task, idx) => {
-        if (idx < completedTasks) {
+        if (notSubmitted) {
+          tasksStatus[task] = 'pending';
+        } else if (idx < completedTasks) {
           tasksStatus[task] = 'passed';
         } else if (idx === completedTasks) {
           tasksStatus[task] = (floor + r) % 3 === 0 ? 'defect' : 'inProgress';
@@ -142,8 +195,8 @@ const generateRoomsData = () => {
         }
       });
 
-      let overallStatus = 'inProgress';
-      if (completedTasks === 13) overallStatus = 'ready';
+      let overallStatus = notSubmitted ? 'pending' : 'inProgress';
+      if (!notSubmitted && completedTasks === 13) overallStatus = 'ready';
       else if (Object.values(tasksStatus).includes('defect')) overallStatus = 'defect';
 
       rooms.push({
@@ -152,7 +205,7 @@ const generateRoomsData = () => {
         floor: floor,
         type: type,
         status: overallStatus,
-        progress: Math.round((completedTasks / 13) * 100),
+        progress: notSubmitted ? 0 : Math.round((completedTasks / 13) * 100),
         tasks: tasksStatus,
         lastInspector: "นายธนโชค ซี.",
         lastUpdate: "2026-10-25 14:30",
@@ -198,7 +251,8 @@ export default function App() {
     const ready = rooms.filter(r => r.status === 'ready').length;
     const defect = rooms.filter(r => r.status === 'defect').length;
     const inProgress = rooms.filter(r => r.status === 'inProgress').length;
-    return { total, ready, defect, inProgress };
+    const pending = rooms.filter(r => r.status === 'pending').length;
+    return { total, ready, defect, inProgress, pending };
   }, [rooms]);
 
   // Filtered rooms
@@ -361,7 +415,7 @@ export default function App() {
           )}
 
           {activeTab === 'newInspection' && (
-            <RoomInspectionFormView t={t} showToast={showToast} rooms={rooms} onSubmitInspection={(record) => {
+            <RoomInspectionFormView t={t} lang={lang} showToast={showToast} rooms={rooms} onSubmitInspection={(record) => {
               const nextRecords = [record, ...inspectionRecords];
               setInspectionRecords(nextRecords);
               setRooms(current => current.map(room => {
@@ -420,135 +474,96 @@ export default function App() {
 // MODULE 1: DASHBOARD VIEW
 // ==========================================
 function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelectedStatusFilter }) {
-  const [chartMode, setChartMode] = useState('completion'); // completion | trade
+  const [chartMode, setChartMode] = useState('floor');
+  const floors = [1, 2, 3, 4, 5, 6, 7, 8];
+  const statusCounts = [
+    { key: 'defect', label: t.dashboard.legend.failed, value: stats.defect, color: '#ef3340' },
+    { key: 'pending', label: t.dashboard.legend.pending, value: stats.pending, color: '#9aa3af' },
+    { key: 'ready', label: t.dashboard.legend.passed, value: stats.ready, color: '#32bd83' },
+    { key: 'inProgress', label: t.dashboard.legend.ready, value: stats.inProgress, color: '#3f7df5' },
+  ];
+  const donutTotal = Math.max(1, rooms.length);
+  let currentStop = 0;
+  const donutGradient = statusCounts.map(item => {
+    const start = currentStop;
+    currentStop += (item.value / donutTotal) * 100;
+    return `${item.color} ${start}% ${currentStop}%`;
+  }).join(', ');
+  const criticalRooms = rooms.filter(room => room.status === 'defect').slice(0, 6);
+  const onStatusSelect = (key) => setSelectedStatusFilter(key === 'ready' ? 'ready' : key);
 
   return (
-    <div className="space-y-6">
-      {/* Metric Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div 
-          onClick={() => setSelectedStatusFilter('all')}
-          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-emerald-500 transition-all hover:scale-[1.01]"
-        >
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase">{t.metrics.totalRooms}</span>
-            <Building2 className="w-5 h-5 text-blue-400" />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-white">{stats.total}</span>
-            <span className="text-xs text-blue-400">100% Total</span>
-          </div>
+    <div className="-m-6 min-h-full space-y-4 bg-[#f3f4f6] p-4 text-slate-800 sm:p-5">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div><h1 className="m-0 text-xl font-bold tracking-normal text-slate-800">{t.dashboard.title}</h1><p className="mt-1 text-xs text-slate-500">{t.dashboard.projectSubtitle}</p></div>
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700">● {t.dashboard.liveSync}</span>
+      </header>
+
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {[
+          { label: t.dashboard.totalRooms, value: stats.total, filter: 'all', color: '#64748b', icon: Building2 },
+          { label: t.dashboard.passed, value: stats.ready, filter: 'ready', color: '#32bd83', icon: CheckCircle2 },
+          { label: t.dashboard.failed, value: stats.defect, filter: 'defect', color: '#ef3340', icon: AlertTriangle },
+          { label: t.dashboard.readyForInspection, value: stats.inProgress, filter: 'inProgress', color: '#3f7df5', icon: Clock },
+          { label: t.dashboard.notSubmitted, value: stats.pending, filter: 'pending', color: '#9aa3af', icon: ClipboardCheck },
+        ].map(card => {
+          const Icon = card.icon;
+          return <button key={card.label} onClick={() => setSelectedStatusFilter(card.filter)} className="flex min-h-20 items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderLeft: `3px solid ${card.color}` }}>
+            <div><div className="text-[11px] font-medium text-slate-500">{card.label}</div><div className="mt-1 text-2xl font-bold leading-none" style={{ color: card.color }}>{card.value}</div></div><Icon className="h-5 w-5" style={{ color: card.color }} />
+          </button>;
+        })}
+      </section>
+
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-4 text-sm font-semibold text-slate-700">{t.dashboard.floorStatus}</h2>
+          {chartMode === 'floor' ? <>
+            <div className="w-full overflow-x-auto"><svg viewBox="0 0 760 190" role="img" aria-label={t.dashboard.floorStatus} className="h-48 min-w-[620px] w-full">
+              {[0, 7, 14, 21, 28].map(tick => { const y = 155 - tick * 4.7; return <g key={tick}><line x1="48" x2="748" y1={y} y2={y} stroke="#e6e9ee" strokeDasharray="2 3"/><text x="39" y={y + 4} textAnchor="end" fill="#8791a0" fontSize="10">{tick}</text></g>; })}
+              {floors.map((floor, index) => {
+                const floorRooms = rooms.filter(room => room.floor === floor);
+                const groups = [
+                  { status: 'ready', color: '#32bd83' }, { status: 'defect', color: '#ef3340' },
+                  { status: 'inProgress', color: '#3f7df5' }, { status: 'pending', color: '#9aa3af' },
+                ];
+                let yBottom = 155;
+                const x = 84 + index * 82;
+                return <g key={floor}>
+                  {groups.map(group => { const count = floorRooms.filter(room => room.status === group.status).length; const height = count * 4.7; yBottom -= height; return count ? <rect key={group.status} x={x} y={yBottom} width="22" height={height} rx="1" fill={group.color}><title>{`Floor ${floor}: ${count} ${group.status}`}</title></rect> : null; })}
+                  <text x={x + 11} y="174" textAnchor="middle" fill="#687386" fontSize="10">F{floor}</text>
+                </g>;
+              })}
+              <line x1="48" x2="748" y1="155" y2="155" stroke="#9aa3af"/>
+            </svg></div>
+            <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-2 text-[10px]">{statusCounts.map(item => <span key={item.key} className="inline-flex items-center gap-1.5 text-slate-500"><i className="h-2 w-2 rounded-sm" style={{ background: item.color }} />{item.label}</span>)}</div>
+          </> : <div className="grid grid-cols-2 gap-3 py-4 sm:grid-cols-4">{TASKS_13.slice(0, 4).map(task => { const count = rooms.reduce((sum, room) => sum + (room.tasks?.[task] === 'defect' ? 1 : 0), 0); return <div key={task} className="rounded-md border border-slate-200 bg-slate-50 p-3"><div className="text-xs text-slate-500">{task}</div><div className="mt-2 text-lg font-bold text-rose-600">{count} {t.dashboard.failed}</div></div>; })}</div>}
+          <div className="mt-3 flex justify-end gap-1"><button onClick={() => setChartMode('floor')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'floor' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>Floor Status</button><button onClick={() => setChartMode('trade')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'trade' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>Trade Defects</button></div>
         </div>
 
-        <div 
-          onClick={() => setSelectedStatusFilter('ready')}
-          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-emerald-500 transition-all hover:scale-[1.01]"
-        >
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase">{t.metrics.passedRooms}</span>
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-emerald-400">{stats.ready}</span>
-            <span className="text-xs text-emerald-400 font-medium">
-              {Math.round((stats.ready / stats.total) * 100)}% Ready
-            </span>
-          </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-700">{t.dashboard.resultSummary}</h2>
+          <div className="my-3 flex justify-center"><div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: `conic-gradient(${donutGradient})` }}><div className="grid h-16 w-16 place-items-center rounded-full bg-white text-xs font-bold text-slate-600">{stats.total}</div></div></div>
+          <div className="space-y-1.5">{statusCounts.map(item => <button key={item.key} onClick={() => onStatusSelect(item.key)} className="flex w-full items-center justify-between gap-2 text-left text-[10px] text-slate-600 hover:text-slate-900"><span className="flex min-w-0 items-center gap-1.5"><i className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.color }} /><span className="truncate">{item.label}</span></span><b className="text-slate-800">{item.value}</b></button>)}</div>
         </div>
+      </section>
 
-        <div 
-          onClick={() => setSelectedStatusFilter('defect')}
-          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-red-500 transition-all hover:scale-[1.01]"
-        >
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase">{t.metrics.defectsFound}</span>
-            <AlertTriangle className="w-5 h-5 text-red-400" />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-red-400">{stats.defect}</span>
-            <span className="text-xs text-red-400 font-medium">Action Required</span>
-          </div>
-        </div>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700"><AlertTriangle className="h-4 w-4 text-rose-500" />{t.dashboard.criticalRooms}</h2>
+        {criticalRooms.length ? <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">{criticalRooms.map((room, index) => {
+          const task = TASKS_13.find(name => room.tasks?.[name] === 'defect');
+          return <button key={room.id} onClick={() => onInspectRoom(room)} className="flex items-center gap-2 rounded-md border border-rose-100 bg-rose-50 p-2 text-left transition hover:border-rose-300"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-rose-600 text-[10px] font-bold text-white">{room.roomNumber}</span><span className="min-w-0"><b className="block text-[10px] text-slate-700">{t.dashboard.room} {room.roomNumber}</b><small className="block truncate text-[9px] text-rose-600">{t.dashboard.defects[index % t.dashboard.defects.length]}{task ? ` · ${task}` : ''}</small></span></button>;
+        })}</div> : <p className="text-xs text-slate-500">{t.dashboard.failed}: 0</p>}
+      </section>
 
-        <div 
-          onClick={() => setSelectedStatusFilter('inProgress')}
-          className="bg-slate-800/80 border border-slate-700/80 p-5 rounded-xl cursor-pointer hover:border-amber-500 transition-all hover:scale-[1.01]"
-        >
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase">{t.metrics.pendingInspection}</span>
-            <Clock className="w-5 h-5 text-amber-400" />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-amber-400">{stats.inProgress}</span>
-            <span className="text-xs text-amber-400 font-medium">In Construction</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Dynamic Progress Charts Panel */}
-      <div className="bg-slate-800/70 border border-slate-700/80 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="font-bold text-base text-slate-100">ความก้าวหน้าโครงการรายชั้น (Floor Completion Overview)</h2>
-            <p className="text-xs text-slate-400">คำนวณจากสถานะงาน 13 รายการในแต่ละห้องพัก</p>
-          </div>
-          <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-700 text-xs">
-            <button 
-              onClick={() => setChartMode('completion')}
-              className={`px-3 py-1 rounded ${chartMode === 'completion' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
-            >
-              Floor Progress
-            </button>
-            <button 
-              onClick={() => setChartMode('trade')}
-              className={`px-3 py-1 rounded ${chartMode === 'trade' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
-            >
-              Trade Defects
-            </button>
-          </div>
-        </div>
-
-        {chartMode === 'completion' ? (
-          <div className="space-y-4">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(floor => {
-              const floorRooms = rooms.filter(r => r.floor === floor);
-              const percent = Math.round(floorRooms.reduce((sum, room) => sum + (room.progress || 0), 0) / (floorRooms.length || 1));
-              return (
-                <div key={floor} className="flex items-center gap-4">
-                  <span className="w-16 text-xs font-semibold text-slate-300">ชั้น {floor}</span>
-                  <div className="flex-1 bg-slate-900 rounded-full h-3.5 overflow-hidden border border-slate-700">
-                    <div 
-                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${percent}%` }}
-                    ></div>
-                  </div>
-                  <span className="w-12 text-right text-xs font-bold text-emerald-400">{percent}%</span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-2">
-            {["Wall Plastering", "Bathroom Tiling", "Primer Paint", "Main Door"].map((trade, i) => (
-              <div key={trade} className="p-4 bg-slate-900/60 rounded-lg border border-slate-700/60">
-                <span className="text-xs text-slate-400">{trade}</span>
-                <p className="text-xl font-bold text-red-400 mt-1">{(i + 1) * 3} Defect Points</p>
-                <div className="mt-2 text-[10px] text-slate-500">ความล่าช้าส่งผลกระทบ 12%</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Room Quick Inspection Table */}
-      <div className="bg-slate-800/70 border border-slate-700/80 rounded-xl overflow-hidden">
+      {/* Preserve the existing quick inspection list below the reference dashboard panels. */}
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="p-4 border-b border-slate-700/80 flex items-center justify-between">
-          <h3 className="font-semibold text-sm text-slate-200">รายชื่อห้องพัก (Room Inspection List)</h3>
-          <span className="text-xs text-slate-400">แสดงผล {visibleRooms.length} ห้อง</span>
+          <h3 className="font-semibold text-sm text-slate-700">รายชื่อห้องพัก (Room Inspection List)</h3>
+          <span className="text-xs text-slate-500">แสดงผล {visibleRooms.length} ห้อง</span>
         </div>
         <div className="overflow-x-auto max-h-96">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-900/80 text-[11px] uppercase text-slate-400 sticky top-0">
+            <thead className="sticky top-0 bg-slate-100 text-[11px] uppercase text-slate-500">
               <tr>
                 <th className="p-3 pl-4">ห้องพัก</th>
                 <th className="p-3">ประเภทห้อง</th>
@@ -558,16 +573,16 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
                 <th className="p-3 text-right pr-4">การจัดการ</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700/50 text-xs text-slate-300">
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-600">
               {visibleRooms.slice(0, 15).map(room => (
-                <tr key={room.id} className="hover:bg-slate-750 transition-colors">
-                  <td className="p-3 pl-4 font-bold text-emerald-400">{room.roomNumber}</td>
+                <tr key={room.id} className="transition-colors hover:bg-slate-50">
+                  <td className="p-3 pl-4 font-bold text-emerald-700">{room.roomNumber}</td>
                   <td className="p-3">{room.type}</td>
                   <td className="p-3">ชั้น {room.floor}</td>
                   <td className="p-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-24 bg-slate-900 rounded-full h-2">
-                        <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${room.progress}%` }}></div>
+                      <div className="w-24 rounded-full bg-slate-100 h-2">
+                        <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${room.progress}%` }}></div>
                       </div>
                       <span className="text-[10px] text-slate-400">{room.progress}%</span>
                     </div>
@@ -578,7 +593,7 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
                   <td className="p-3 text-right pr-4">
                     <button 
                       onClick={() => onInspectRoom(room)}
-                      className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-slate-200 text-xs font-medium inline-flex items-center gap-1 transition-colors"
+                      className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200"
                     >
                       <Eye className="w-3 h-3 text-emerald-400" />
                       <span>{t.common.details}</span>
@@ -683,10 +698,13 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, onInspectR
 // ==========================================
 // MODULE 3: NEW INSPECTION FORM
 // ==========================================
-function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
+function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) {
+  const labels = i18n[lang].form;
+  const taskOptions = lang === 'th' ? TASKS_13_TH : TASKS_13;
   const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.roomNumber || '101');
   const [taskName, setTaskName] = useState(TASKS_13[0]);
   const [status, setStatus] = useState('passed');
+  const [inspectorName, setInspectorName] = useState(rooms[0]?.lastInspector || '');
   const [remarks, setRemarks] = useState('');
   
   // AI Simulation States
@@ -720,7 +738,7 @@ function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmitInspection({ id: crypto.randomUUID(), roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString('th-TH'), inspector: 'นายธนโชค ซี.', photo: photoPreview });
+    onSubmitInspection({ id: crypto.randomUUID(), roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoPreview });
     setRemarks('');
     setPhotoPreview(null);
     setAiScore(null);
@@ -729,49 +747,53 @@ function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
   return (
     <div className="max-w-4xl mx-auto bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-100">ฟอร์มบันทึกการตรวจงาน (Room Inspection Form)</h2>
+        <h2 className="text-lg font-bold text-slate-100">{labels.inspectionTitle} (Room Inspection Form)</h2>
         <p className="text-xs text-slate-400">บันทึกผลการตรวจสอบ 13 งาน พร้อมระบบ AI ช่วยวิเคราะห์รูปภาพและบันทึกเสียง</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">เลือกห้องพัก</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1">{labels.room}</label>
             <select 
               value={selectedRoom}
               onChange={(e) => setSelectedRoom(e.target.value)}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             >
               {rooms.map(r => (
-                <option key={r.id} value={r.roomNumber}>ห้อง {r.roomNumber} (ชั้น {r.floor})</option>
+                <option key={r.id} value={r.roomNumber}>{labels.roomOption(r.roomNumber, r.floor)}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">งานที่ตรวจเช็ค (13 Tasks)</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1">{labels.task}</label>
             <select 
               value={taskName}
               onChange={(e) => setTaskName(e.target.value)}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             >
-              {TASKS_13.map(t => (
-                <option key={t} value={t}>{t}</option>
+              {TASKS_13.map((task, index) => (
+                <option key={task} value={task}>{taskOptions[index]}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">ผลการตรวจ</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1">{labels.result}</label>
             <select 
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             >
-              <option value="passed">ผ่าน (Passed)</option>
-              <option value="defect">มีข้อบกพร่อง (Defect)</option>
-              <option value="inProgress">กำลังแก้ไข (In Progress)</option>
+              <option value="passed">{labels.passed} (Passed)</option>
+              <option value="defect">{labels.defect} (Defect)</option>
+              <option value="inProgress">{labels.inProgress} (In Progress)</option>
             </select>
+          </div>
+          <div>
+            <label htmlFor="inspector-name" className="mb-1 block text-xs font-medium text-slate-300">{labels.inspector}</label>
+            <input id="inspector-name" name="inspectorName" type="text" required value={inspectorName} onChange={event => setInspectorName(event.target.value)} placeholder={labels.inspector} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none" />
           </div>
         </div>
 
@@ -780,7 +802,7 @@ function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
           <input type="file" accept="image/*" onChange={handlePhotoUpload} id="photo-upload" className="hidden" />
           <label htmlFor="photo-upload" className="cursor-pointer flex flex-col items-center justify-center">
             <Camera className="w-8 h-8 text-emerald-400 mb-2" />
-            <span className="text-xs font-medium text-slate-200">แนบภาพถ่ายหน้างาน (Photo Upload)</span>
+            <span className="text-xs font-medium text-slate-200">{labels.photo} (Photo Upload)</span>
             <span className="text-[10px] text-slate-400">รองรับ PNG, JPG พร้อม AI ประเมินคุณภาพภาพ</span>
           </label>
 
@@ -804,7 +826,7 @@ function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
         {/* Voice Note & Remarks */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-medium text-slate-300">หมายเหตุ / รายละเอียดการตรวจ</label>
+            <label className="block text-xs font-medium text-slate-300">{labels.remarks}</label>
             <button
               type="button"
               onClick={handleVoiceRecord}
@@ -813,7 +835,7 @@ function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
               }`}
             >
               <Mic className="w-3.5 h-3.5" />
-              <span>{isRecording ? "กำลังบันทึกเสียง..." : "บันทึกด้วยเสียง (AI Speech-to-Text)"}</span>
+              <span>{isRecording ? labels.recording : `${labels.voice} (AI Speech-to-Text)`}</span>
             </button>
           </div>
           <textarea
@@ -829,7 +851,7 @@ function RoomInspectionFormView({ showToast, rooms, onSubmitInspection }) {
           type="submit"
           className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg text-sm"
         >
-          บันทึกผลการตรวจเช็ค (Submit Inspection)
+          {labels.submit} (Submit Inspection)
         </button>
       </form>
     </div>
