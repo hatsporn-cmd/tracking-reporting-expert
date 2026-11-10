@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import roomPlanImage from './assets/room-plan-reference.jpg';
 import { 
   Building2, LayoutDashboard, Grid, ClipboardCheck, History, FolderKanban, 
   Bot, CheckCircle2, AlertTriangle, Clock, Search, 
   Upload, Mic, FileText, Download, Eye, Languages, 
-  Bell, Sparkles, X, FileSpreadsheet,
+  Bell, Sparkles, X, FileSpreadsheet, Menu, LogOut,
   Camera, FileDown as FilePdf
 } from 'lucide-react';
 
@@ -15,6 +15,31 @@ const i18n = {
     subTitle: "Tracking & Reporting Expert System",
     projectTitle: "Boutique Bangkok Sukhumvit 5",
     siteEngineer: "นายธนโชค ซี. (Site Engineer)",
+    auth: {
+      title: "เข้าสู่ระบบ T-REX", subtitle: "ระบบติดตามและจัดการงานก่อสร้าง", name: "ชื่อผู้ใช้งาน", namePlaceholder: "กรอกชื่อของคุณ",
+      role: "เลือกบทบาท", engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", login: "เข้าสู่ระบบ", language: "ภาษา",
+      engineerAccess: "จัดการการตรวจ เอกสาร สถานะ และรายงานได้", viewerAccess: "ดูแดชบอร์ด ผังชั้น ประวัติ และเอกสารได้เท่านั้น"
+    },
+    role: { engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", logout: "ออกจากระบบ", activeUser: "ผู้ใช้งานปัจจุบัน" },
+    documents: {
+      title: "ศูนย์เอกสารโครงการ", subtitle: "เลือกตามอาคาร ชั้น ห้อง และหมวดงานเพื่อดูเอกสาร",
+      upload: "อัปโหลดเอกสาร", type: "ประเภทเอกสาร", typeGeneral: "เอกสารทั่วไป", typeRI: "Request for Inspection (RI)", typeInspection: "รายงานการตรวจ", typeDefect: "รายงานข้อบกพร่อง",
+      scheduledDate: "วันที่นัดตรวจ", reference: "เลขที่เอกสาร", building: "อาคาร", floor: "ชั้น", room: "ห้อง", category: "หมวดงาน", file: "เลือกไฟล์",
+      cancel: "ยกเลิก", save: "บันทึกเอกสาร", required: "กรุณากรอกข้อมูลที่จำเป็น", empty: "ไม่พบเอกสารในตำแหน่งนี้",
+      chooseBuilding: "เลือกอาคาร", chooseFloor: "เลือกชั้น", chooseRoom: "เลือกห้อง", chooseCategory: "เลือกหมวดงาน",
+      architecture: "สถาปัตยกรรม", mep: "ระบบประกอบอาคาร (MEP)", structure: "โครงสร้าง", referenceNumber: "เลขที่อ้างอิง", date: "วันที่เอกสาร", statusLabel: "สถานะ",
+      statusPending: "รอตรวจ", statusCompleted: "ตรวจแล้ว", statusExpired: "หมดอายุ", statusArchived: "จัดเก็บแล้ว", markComplete: "ทำเครื่องหมายว่าตรวจแล้ว",
+      morningWarning: "แจ้งเตือนรอบเช้า: มีเอกสาร RI ถึงกำหนดและยังไม่ได้ตรวจ", dueToday: "ถึงกำหนดวันนี้", reminderDay: "วันที่ {day} หลังวันนัด",
+      expiredTitle: "รายงานเหตุผลที่ไม่ได้เข้าตรวจ", expiredDescription: "เอกสาร RI หมดอายุ กรุณาระบุเหตุผลก่อนจัดเก็บเอกสาร",
+      reasonLabel: "เหตุผลที่ไม่ได้เข้าตรวจ", reasonPlaceholder: "อธิบายเหตุผลที่ไม่ได้เข้าตรวจ...", archive: "บันทึกเหตุผลและจัดเก็บ",
+      archivedReason: "เหตุผลที่จัดเก็บ", documentPreview: "ตัวอย่างเอกสาร", uploaded: "อัปโหลดเอกสารแล้ว", allLevels: "ทั้งหมด",
+      buildingName: "อาคารหลัก", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"]
+    },
+    records: {
+      title: "ประวัติการตรวจแยกตามหมวดงาน", subtitle: "จัดกลุ่มตามงานตรวจ แล้วแยกตามอาคาร ชั้น และห้อง",
+      allCategories: "ทุกหมวดงาน", noRecords: "ยังไม่มีประวัติการตรวจในหมวดงานนี้", building: "อาคาร", floor: "ชั้น", room: "ห้อง",
+      inspectionDate: "วันที่ตรวจ", inspector: "ผู้ตรวจ", result: "ผลตรวจ", openRoom: "ดูรายละเอียดห้อง", roomCount: "{count} ห้อง", recordCount: "{count} รายการ"
+    },
     nav: {
       dashboard: "แดชบอร์ดสรุปผล",
       floorStatus: "สถานะรายชั้นและการส่งมอบ",
@@ -84,6 +109,31 @@ const i18n = {
     subTitle: "Tracking & Reporting Expert System",
     projectTitle: "Boutique Bangkok Sukhumvit 5",
     siteEngineer: "Tanachock C. (Site Engineer)",
+    auth: {
+      title: "Sign in to T-REX", subtitle: "Construction tracking and management platform", name: "Your name", namePlaceholder: "Enter your name",
+      role: "Choose a role", engineer: "Site Engineer", viewer: "Viewer / Guest", login: "Sign in", language: "Language",
+      engineerAccess: "Manage inspections, documents, statuses, and reports", viewerAccess: "View dashboard, floor map, records, and documents only"
+    },
+    role: { engineer: "Site Engineer", viewer: "Viewer / Guest", logout: "Log out", activeUser: "Signed in as" },
+    documents: {
+      title: "Project Document Hub", subtitle: "Drill down by building, floor, room, and work category",
+      upload: "Upload Document", type: "Document Type", typeGeneral: "General Document", typeRI: "Request for Inspection (RI)", typeInspection: "Inspection Report", typeDefect: "Defect Report",
+      scheduledDate: "Scheduled Inspection Date", reference: "Document Reference", building: "Building", floor: "Floor", room: "Room", category: "Work Category", file: "Choose File",
+      cancel: "Cancel", save: "Save Document", required: "Please complete the required fields", empty: "No documents at this location",
+      chooseBuilding: "Choose Building", chooseFloor: "Choose Floor", chooseRoom: "Choose Room", chooseCategory: "Choose Work Category",
+      architecture: "Architecture", mep: "MEP", structure: "Structure", referenceNumber: "Reference Number", date: "Document Date", statusLabel: "Status",
+      statusPending: "Pending Inspection", statusCompleted: "Completed", statusExpired: "Expired", statusArchived: "Archived", markComplete: "Mark inspected",
+      morningWarning: "Morning reminder: RI documents are due and have not been inspected", dueToday: "Due today", reminderDay: "Day {day} after scheduled date",
+      expiredTitle: "Non-Inspection Reason Report", expiredDescription: "This RI document has expired. Enter the reason before archiving it.",
+      reasonLabel: "Reason for missed inspection", reasonPlaceholder: "Explain why the inspection was missed...", archive: "Save reason and archive",
+      archivedReason: "Archive reason", documentPreview: "Document Preview", uploaded: "Document uploaded", allLevels: "All",
+      buildingName: "Main Building", workCategories: ["Architecture", "MEP", "Structure"]
+    },
+    records: {
+      title: "Inspection History by Work Category", subtitle: "Grouped by inspection task, then by building, floor, and room",
+      allCategories: "All Categories", noRecords: "No inspection history for this category", building: "Building", floor: "Floor", room: "Room",
+      inspectionDate: "Inspection Date", inspector: "Inspector", result: "Result", openRoom: "View Room Details", roomCount: "{count} rooms", recordCount: "{count} records"
+    },
     nav: {
       dashboard: "Executive Dashboard",
       floorStatus: "Floor & Handover Status",
@@ -268,6 +318,10 @@ function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
   URL.revokeObjectURL(url);
 }
 
+const getLocalDateString = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const dayDifference = (fromDate, toDate = getLocalDateString()) => Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000);
+const expireDueRiDocuments = (documents, today = getLocalDateString()) => documents.map(doc => doc.documentType === 'ri' && doc.status === 'pending' && doc.scheduledDate && dayDifference(doc.scheduledDate, today) >= 2 ? { ...doc, status: 'expired' } : doc);
+
 const EVIDENCE_DB_NAME = 'trex-inspection-evidence';
 const EVIDENCE_STORE_NAME = 'records';
 function openEvidenceDb() {
@@ -354,6 +408,11 @@ const generateRoomsData = () => {
 export default function App() {
   const [lang, setLang] = useState('th');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [session, setSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('trex-session')) || null; }
+    catch { return null; }
+  });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rooms, setRooms] = useState(() => {
     try { return JSON.parse(localStorage.getItem('trex-rooms')) || generateRoomsData(); }
     catch { return generateRoomsData(); }
@@ -380,6 +439,18 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleLogin = (user) => {
+    setSession(user);
+    localStorage.setItem('trex-session', JSON.stringify(user));
+    setActiveTab('dashboard');
+  };
+  const handleLogout = () => {
+    setSession(null);
+    localStorage.removeItem('trex-session');
+    setActiveTab('dashboard');
+    setMobileMenuOpen(false);
+  };
+
   // KPI Computations
   const stats = useMemo(() => {
     const total = rooms.length;
@@ -401,9 +472,21 @@ export default function App() {
     });
   }, [rooms, searchQuery, selectedFloorFilter, selectedStatusFilter]);
 
+  if (!session) return <LocalizedUI lang={lang}><LoginScreen lang={lang} t={t} setLang={setLang} onLogin={handleLogin} /></LocalizedUI>;
+
+  const isEngineer = session.role === 'engineer';
+  const navItems = [
+    { id: 'dashboard', icon: LayoutDashboard, label: t.nav.dashboard },
+    { id: 'floorStatus', icon: Grid, label: t.nav.floorStatus },
+    { id: 'newInspection', icon: ClipboardCheck, label: t.nav.newInspection, restricted: true },
+    { id: 'inspectionRecords', icon: History, label: t.nav.inspectionRecords },
+    { id: 'documentCenter', icon: FolderKanban, label: t.nav.documentCenter },
+    { id: 'aiAssistant', icon: Bot, label: t.nav.aiAssistant, badge: 'AI', restricted: true },
+  ].filter(item => isEngineer || !item.restricted);
+
   return (
     <LocalizedUI lang={lang}>
-    <div className="flex h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-slate-900 font-sans text-slate-100">
       {/* Toast Alert Banner */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-emerald-600 text-white px-5 py-3 rounded-lg shadow-2xl border border-emerald-400 animate-bounce">
@@ -413,7 +496,8 @@ export default function App() {
       )}
 
       {/* --- SIDEBAR --- */}
-      <aside className="w-64 bg-[#0B132B] flex flex-col border-r border-slate-800 flex-shrink-0">
+      {mobileMenuOpen && <button type="button" aria-label={lang === 'th' ? 'ปิดเมนู' : 'Close menu'} className="fixed inset-0 z-30 bg-black/60 md:hidden" onClick={() => setMobileMenuOpen(false)} />}
+      <aside className={`${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 flex-col border-r border-slate-800 bg-[#0B132B] transition-transform duration-200 md:static md:z-auto md:w-64 md:translate-x-0`}>
         {/* Brand Header */}
         <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
           <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-400 rounded-xl flex items-center justify-center text-emerald-400 font-extrabold text-xl shadow-inner">
@@ -439,20 +523,13 @@ export default function App() {
 
         {/* Navigation Menu */}
         <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-          {[
-            { id: 'dashboard', icon: LayoutDashboard, label: t.nav.dashboard },
-            { id: 'floorStatus', icon: Grid, label: t.nav.floorStatus },
-            { id: 'newInspection', icon: ClipboardCheck, label: t.nav.newInspection },
-            { id: 'inspectionRecords', icon: History, label: t.nav.inspectionRecords },
-            { id: 'documentCenter', icon: FolderKanban, label: t.nav.documentCenter },
-            { id: 'aiAssistant', icon: Bot, label: t.nav.aiAssistant, badge: 'AI' },
-          ].map(item => {
+          {navItems.map(item => {
             const Icon = item.icon;
             const active = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                   active 
                     ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' 
@@ -480,8 +557,8 @@ export default function App() {
               TC
             </div>
             <div className="text-left truncate">
-              <p className="text-xs font-semibold text-slate-200 truncate">{t.siteEngineer}</p>
-              <p className="text-[10px] text-emerald-400">Online • Site Active</p>
+              <p className="text-xs font-semibold text-slate-200 truncate">{session.name}</p>
+              <p className="text-[10px] text-emerald-400">{session.role === 'engineer' ? t.role.engineer : t.role.viewer}</p>
             </div>
           </div>
         </div>
@@ -491,9 +568,10 @@ export default function App() {
       <div className="flex-1 flex flex-col overflow-hidden bg-slate-900">
         
         {/* Top Header Bar */}
-        <header className="h-14 border-b border-slate-800 bg-slate-950/30 px-6 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-4 flex-1 max-w-md">
-            <div className="relative w-full">
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/30 px-3 py-2 sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3 sm:max-w-md">
+            <button type="button" onClick={() => setMobileMenuOpen(true)} className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-200 md:hidden" aria-label={lang === 'th' ? 'เปิดเมนู' : 'Open menu'}><Menu className="h-4 w-4" /></button>
+            <div className="relative hidden w-full sm:block">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
@@ -505,7 +583,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="max-w-36 text-right sm:max-w-52"><p className="hidden truncate text-[10px] text-slate-400 md:block">{session.name}</p><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300">{session.role === 'engineer' ? t.role.engineer : t.role.viewer}</span></div>
             {/* Language Switcher Button */}
             <button
               onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
@@ -523,11 +602,13 @@ export default function App() {
               <Bell className="w-4 h-4" />
               <span className="w-2 h-2 rounded-full bg-red-500 absolute top-1 right-1"></span>
             </button>
+            <button type="button" onClick={handleLogout} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700 sm:px-3" title={t.role.logout}><LogOut className="h-4 w-4" /><span className="hidden sm:inline">{t.role.logout}</span></button>
           </div>
+          <div className="relative order-last w-full sm:hidden"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><input type="text" placeholder={t.common.search} value={searchQuery} onChange={event => setSearchQuery(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-800/70 py-2 pl-9 pr-3 text-xs text-slate-200 placeholder-slate-400 focus:border-emerald-500 focus:outline-none"/></div>
         </header>
 
         {/* View Content Renderer */}
-        <main className="flex-1 overflow-y-auto bg-[#0B132B] p-6">
+        <main className="flex-1 overflow-y-auto bg-[#0B132B] p-3 sm:p-6">
           {activeTab === 'dashboard' && (
             <DashboardView 
               t={t} 
@@ -579,7 +660,7 @@ export default function App() {
           )}
 
           {activeTab === 'documentCenter' && (
-            <DocumentCenterView t={t} showToast={showToast} />
+            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} canEdit={isEngineer} userName={session.name} />
           )}
 
           {activeTab === 'aiAssistant' && (
@@ -594,6 +675,37 @@ export default function App() {
     </div>
     </LocalizedUI>
   );
+}
+
+// ==========================================
+// SIGN-IN SCREEN
+// ==========================================
+function LoginScreen({ lang, t, setLang, onLogin }) {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('engineer');
+  const submit = event => {
+    event.preventDefault();
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    onLogin({ name: cleanName, role });
+  };
+  return <main className="flex min-h-screen items-center justify-center bg-[#0B132B] p-4 text-slate-100 sm:p-6">
+    <section className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-800/90 shadow-2xl">
+      <div className="flex items-center justify-between border-b border-slate-700 p-5 sm:p-6">
+        <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl border border-emerald-400 bg-emerald-500/20 text-2xl">🦖</div><div><h1 className="text-lg font-bold text-white">{t.appName}</h1><p className="text-xs text-slate-400">{t.auth.subtitle}</p></div></div>
+        <button type="button" onClick={() => setLang(lang === 'th' ? 'en' : 'th')} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200">{lang === 'th' ? 'TH | EN' : 'EN | TH'}</button>
+      </div>
+      <form onSubmit={submit} className="space-y-5 p-5 sm:p-6">
+        <div><h2 className="text-xl font-bold">{t.auth.title}</h2><p className="mt-1 text-xs text-slate-400">{t.subTitle}</p></div>
+        <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-300">{t.auth.name}</span><input autoComplete="name" required value={name} onChange={event => setName(event.target.value)} placeholder={t.auth.namePlaceholder} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none" /></label>
+        <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-slate-300">{t.auth.role}</legend>
+          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${role === 'engineer' ? 'border-emerald-500 bg-emerald-950/30' : 'border-slate-700 bg-slate-900/60'}`}><input type="radio" name="role" value="engineer" checked={role === 'engineer'} onChange={() => setRole('engineer')} className="mt-1 accent-emerald-500" /><span><b className="block text-sm text-slate-100">{t.auth.engineer}</b><small className="mt-1 block text-xs leading-relaxed text-slate-400">{t.auth.engineerAccess}</small></span></label>
+          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${role === 'viewer' ? 'border-sky-500 bg-sky-950/30' : 'border-slate-700 bg-slate-900/60'}`}><input type="radio" name="role" value="viewer" checked={role === 'viewer'} onChange={() => setRole('viewer')} className="mt-1 accent-sky-500" /><span><b className="block text-sm text-slate-100">{t.auth.viewer}</b><small className="mt-1 block text-xs leading-relaxed text-slate-400">{t.auth.viewerAccess}</small></span></label>
+        </fieldset>
+        <button type="submit" className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500">{t.auth.login}</button>
+      </form>
+    </section>
+  </main>;
 }
 
 // ==========================================
@@ -619,7 +731,7 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
   const onStatusSelect = (key) => setSelectedStatusFilter(key === 'ready' ? 'ready' : key);
 
   return (
-    <div className="-m-6 min-h-full space-y-4 bg-[#0B132B] p-4 text-slate-100 sm:p-5">
+    <div className="-m-3 min-h-full space-y-4 bg-[#0B132B] p-3 text-slate-100 sm:-m-6 sm:p-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div><h1 className="m-0 text-xl font-bold tracking-normal text-slate-100">{t.dashboard.title}</h1><p className="mt-1 text-xs text-slate-400">{t.dashboard.projectSubtitle}</p></div>
         <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">● {t.dashboard.liveSync}</span>
@@ -1032,192 +1144,188 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
 // ==========================================
 // MODULE 4: 13-TASK INSPECTION RECORDS
 // ==========================================
-function InspectionRecordsView({ t, rooms, records, onInspectRoom, showToast }) {
-  const [selectedRoomId, setSelectedRoomId] = useState(rooms[0]?.id || '101');
-  const activeRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
+  const labels = t.records;
+  const categories = [...new Set([...TASKS_13, ...records.map(record => record.task).filter(Boolean)])];
+  const byLocation = entries => {
+    const buildings = new Map();
+    entries.forEach(entry => {
+      const building = entry.building || t.documents.buildingName;
+      if (!buildings.has(building)) buildings.set(building, new Map());
+      const floors = buildings.get(building);
+      const floor = String(entry.floor ?? rooms.find(room => String(room.roomNumber) === String(entry.roomNumber))?.floor ?? '—');
+      if (!floors.has(floor)) floors.set(floor, new Map());
+      const floorRooms = floors.get(floor);
+      const roomNumber = String(entry.roomNumber || '—');
+      if (!floorRooms.has(roomNumber)) floorRooms.set(roomNumber, []);
+      floorRooms.get(roomNumber).push(entry);
+    });
+    return buildings;
+  };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between bg-slate-800/80 p-4 rounded-xl border border-slate-700">
-        <div>
-          <h2 className="font-bold text-base text-slate-100">ลำดับขั้นตอนการตรวจ 13 งาน (13-Task Inspection Timeline)</h2>
-          <p className="text-xs text-slate-400">ตรวจสอบความสมบูรณ์ในแต่ละขั้นตอนของห้องพัก</p>
-        </div>
-
-        {/* Room Switcher Dropdown */}
-        <select
-          value={selectedRoomId}
-          onChange={(e) => setSelectedRoomId(e.target.value)}
-          className="bg-slate-900 border border-slate-700 text-xs font-bold text-emerald-400 px-4 py-2 rounded-lg"
-        >
-          {rooms.map(r => (
-            <option key={r.id} value={r.id}>ห้อง {r.roomNumber} (ชั้น {r.floor})</option>
-          ))}
-        </select>
-      </div>
-
-      {records.length > 0 && <section className="rounded-xl border border-slate-700 bg-slate-800/70 p-4">
-        <h3 className="mb-3 text-sm font-bold text-emerald-400">บันทึกการตรวจล่าสุด ({records.length})</h3>
-        <div className="space-y-2">{records.slice(0, 8).map(record => <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900/70 p-3 text-xs">
-          <span>ห้อง {record.roomNumber} · {record.task} · {record.status}</span><span className="text-slate-400">{record.date}</span>
-        </div>)}</div>
-      </section>}
-      {/* Task Grid Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {TASKS_13.map((task, idx) => {
-          const status = activeRoom.tasks[task] || 'pending';
-          return (
-            <div key={task} className="bg-slate-800/70 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between space-y-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-slate-900 text-emerald-400 font-bold text-xs flex items-center justify-center border border-slate-700">
-                    {idx + 1}
-                  </span>
-                  <span className="font-semibold text-xs text-slate-200">{task}</span>
-                </div>
-                <StatusBadge status={status} t={t} />
-              </div>
-
-              <div className="text-[11px] text-slate-400 space-y-1 bg-slate-900/40 p-2.5 rounded-lg">
-                <p>ผู้ตรวจล่าสุด: {activeRoom.lastInspector}</p>
-                <p>วันที่: {activeRoom.lastUpdate}</p>
-              </div>
-
-              <div className="flex items-center justify-between pt-1 border-t border-slate-700/60">
-                <button 
-                  onClick={() => activeRoom.tasks[task] === 'pending' ? showToast('งานนี้ยังไม่มีหลักฐานภาพ') : onInspectRoom(activeRoom)}
-                  className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>หลักฐานภาพถ่าย</span>
-                </button>
-                <button 
-                  onClick={() => onInspectRoom(activeRoom)}
-                  className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[10px]"
-                >
-                  ดูรายละเอียดห้อง
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+  return <div className="space-y-4 sm:space-y-6">
+    <header className="rounded-xl border border-slate-700 bg-slate-800/80 p-4"><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p><p className="mt-3 text-[11px] text-emerald-300">{labels.recordCount.replace('{count}', records.length)}</p></header>
+    <div className="space-y-3">
+      {categories.map((task, index) => {
+        const taskRecords = records.filter(record => record.task === task).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const grouped = byLocation(taskRecords);
+        return <details key={task} open={index === 0 && records.length > 0} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-slate-700/30"><span className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-xs font-bold text-emerald-400">{index + 1}</span><b className="text-sm text-slate-100">{task}</b></span><span className="text-[10px] text-slate-400">{labels.recordCount.replace('{count}', taskRecords.length)}</span></summary>
+          <div className="space-y-3 border-t border-slate-700 p-3 sm:p-4">
+            {grouped.size === 0 ? <p className="rounded-lg bg-slate-900/60 p-4 text-xs text-slate-400">{labels.noRecords}</p> : [...grouped.entries()].map(([building, floors]) => <section key={building} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"><h3 className="mb-3 text-xs font-bold text-emerald-300">{labels.building}: {building}</h3>
+              <div className="space-y-3">{[...floors.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([floor, floorRooms]) => <div key={floor}><h4 className="mb-2 text-[11px] font-semibold text-slate-300">{labels.floor} {floor}</h4><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{[...floorRooms.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([roomNumber, roomRecords]) => {
+                const room = rooms.find(item => String(item.roomNumber) === roomNumber);
+                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p></div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
+              })}</div></div>)}</div>
+            </section>)}
+          </div>
+        </details>;
+      })}
     </div>
-  );
+  </div>;
 }
 
 // ==========================================
 // MODULE 5: DOCUMENT CENTER
 // ==========================================
-function DocumentCenterView({ t, showToast }) {
+function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName }) {
+  const labels = t.documents;
+  const sampleDocs = () => [
+    { id: 'seed-1', name: 'Inspection_Report_Floor_4_Q3.pdf', reference: 'INS-2026-004', documentType: 'inspection', building: 'main', floor: '4', roomNumber: '401', category: 'Architecture', date: getLocalDateString(), status: 'completed', size: '3.4 MB' },
+    { id: 'seed-2', name: 'Defect_Summary_Boutique_Sukhumvit5.xlsx', reference: 'DEF-2026-002', documentType: 'defect', building: 'main', floor: '5', roomNumber: '502', category: 'MEP', date: getLocalDateString(), status: 'completed', size: '1.2 MB' },
+    { id: 'seed-3', name: 'RI_Architectural_Specs_V2.pdf', reference: 'RI-2026-003', documentType: 'ri', building: 'main', floor: '6', roomNumber: '603', category: 'Architecture', date: getLocalDateString(), scheduledDate: getLocalDateString(), status: 'pending', size: '8.9 MB' },
+    { id: 'seed-4', name: 'Handover_Certificate_Floor_1-2.pdf', reference: 'STR-2026-001', documentType: 'general', building: 'main', floor: '1', roomNumber: '101', category: 'Structure', date: getLocalDateString(), status: 'completed', size: '4.1 MB' }
+  ];
+  const [docs, setDocs] = useState(() => {
+    try { const stored = JSON.parse(localStorage.getItem('trex-documents')); return Array.isArray(stored) && stored.length ? expireDueRiDocuments(stored) : sampleDocs(); }
+    catch { return sampleDocs(); }
+  });
+  const [path, setPath] = useState({ building: null, floor: null, room: null, category: null });
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [reasonDoc, setReasonDoc] = useState(null);
+  const [reasonText, setReasonText] = useState('');
   const [selectedDoc, setSelectedDoc] = useState(null);
-  const [docs, setDocs] = useState([
-    { id: 1, name: "Inspection_Report_Floor_4_Q3.pdf", category: "Inspection Reports", size: "3.4 MB", date: "2026-10-20" },
-    { id: 2, name: "Defect_Summary_Boutique_Sukhumvit5.xlsx", category: "Defect Reports", size: "1.2 MB", date: "2026-10-22" },
-    { id: 3, name: "RI_Architectural_Specs_V2.pdf", category: "RI Documents", size: "8.9 MB", date: "2026-09-15" },
-    { id: 4, name: "Handover_Certificate_Floor_1-2.pdf", category: "Inspection Reports", size: "4.1 MB", date: "2026-10-24" }
-  ]);
-  const handleUpload = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setDocs(current => [{ id: crypto.randomUUID(), name: file.name, category: 'Uploaded documents', size: `${(file.size / 1024 / 1024).toFixed(2)} MB`, date: new Date().toISOString().slice(0, 10), file }, ...current]);
-    showToast(`เพิ่มเอกสาร ${file.name} แล้ว`);
-    event.target.value = '';
+  const [formError, setFormError] = useState('');
+  const [today, setToday] = useState(() => getLocalDateString());
+  const lastCheckedDate = useRef(today);
+  const [form, setForm] = useState({ documentType: 'general', building: 'main', floor: '1', roomNumber: '', category: 'Architecture', reference: '', scheduledDate: '', file: null });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const nextDate = getLocalDateString();
+      if (lastCheckedDate.current !== nextDate) {
+        lastCheckedDate.current = nextDate;
+        setToday(nextDate);
+        setDocs(current => expireDueRiDocuments(current, nextDate));
+      }
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem('trex-documents', JSON.stringify(docs.map(doc => { const metadata = { ...doc }; delete metadata.file; return metadata; }))); }
+    catch (error) { console.warn('Could not save document metadata:', error); }
+  }, [docs]);
+  useEffect(() => () => { if (selectedDoc?.previewUrl) URL.revokeObjectURL(selectedDoc.previewUrl); }, [selectedDoc]);
+
+  const buildingKeys = [...new Set(['main', 'annex', ...docs.map(doc => doc.building).filter(Boolean)])];
+  const floors = [...new Set(rooms.map(room => String(room.floor)))].sort((a, b) => Number(a) - Number(b));
+  const roomOptions = rooms.filter(room => String(room.floor) === String(form.floor));
+  const displayBuilding = key => key === 'main' ? labels.buildingName : key === 'annex' ? (lang === 'th' ? 'อาคารส่วนต่อขยาย' : 'Annex Building') : key;
+  const displayCategory = key => key === 'Architecture' ? labels.architecture : key === 'MEP' ? labels.mep : labels.structure;
+  const displayType = key => ({ ri: labels.typeRI, inspection: labels.typeInspection, defect: labels.typeDefect, general: labels.typeGeneral })[key] || labels.typeGeneral;
+  const displayStatus = key => ({ pending: labels.statusPending, completed: labels.statusCompleted, expired: labels.statusExpired, archived: labels.statusArchived })[key] || labels.statusPending;
+  const lifecycle = doc => {
+    if (doc.documentType !== 'ri' || doc.status === 'completed' || doc.status === 'archived') return doc.status;
+    const elapsed = dayDifference(doc.scheduledDate || doc.date, today);
+    if (elapsed >= 2) return 'expired';
+    return 'pending';
   };
-  const handleDownload = async (doc) => {
-    if (doc.file) {
-      const url = URL.createObjectURL(doc.file);
-      const anchor = document.createElement('a'); anchor.href = url; anchor.download = doc.name; anchor.click(); URL.revokeObjectURL(url);
-    } else {
-      downloadFile(`${doc.name}\nหมวดหมู่: ${doc.category}\nวันที่: ${doc.date}\n\nไฟล์ตัวอย่างสำหรับสาธิต`, `${doc.name}.txt`);
-    }
-    showToast(`ดาวน์โหลด ${doc.name} แล้ว`);
+  const reminders = docs.filter(doc => doc.documentType === 'ri' && lifecycle(doc) === 'pending' && dayDifference(doc.scheduledDate || doc.date, today) >= 0);
+
+  const resetPathTo = level => setPath(previous => ({ building: previous.building, floor: level === 'floor' || level === 'room' || level === 'category' ? previous.floor : null, room: level === 'room' || level === 'category' ? previous.room : null, category: level === 'category' ? previous.category : null }));
+  const chooseBuilding = value => setPath({ building: value, floor: null, room: null, category: null });
+  const chooseFloor = value => setPath(current => ({ ...current, floor: value, room: null, category: null }));
+  const chooseRoom = value => setPath(current => ({ ...current, room: value, category: null }));
+  const chooseCategory = value => setPath(current => ({ ...current, category: value }));
+  const docsAtPath = docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === path.category)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.reference || '').localeCompare(String(b.reference || ''), undefined, { numeric: true }));
+
+  const openUpload = () => {
+    const nextReference = `DOC-${today.slice(0, 4)}-${String(docs.length + 1).padStart(4, '0')}`;
+    const initialFloor = floors[0] || '1';
+    const initialRoom = rooms.find(room => String(room.floor) === initialFloor)?.roomNumber || '';
+    setForm({ documentType: 'general', building: 'main', floor: initialFloor, roomNumber: initialRoom, category: 'Architecture', reference: nextReference, scheduledDate: '', file: null });
+    setFormError('');
+    setUploadOpen(true);
+  };
+  const submitUpload = event => {
+    event.preventDefault();
+    if (!form.file || !form.floor || !form.roomNumber || !form.category || (form.documentType === 'ri' && (!form.scheduledDate || form.scheduledDate < today))) { setFormError(labels.required); return; }
+    const documentRecord = { id: crypto.randomUUID(), name: form.file.name, reference: form.reference.trim() || `DOC-${today.replaceAll('-', '')}`, documentType: form.documentType, building: form.building, floor: String(form.floor), roomNumber: String(form.roomNumber), category: form.category, date: today, scheduledDate: form.documentType === 'ri' ? form.scheduledDate : null, status: 'pending', size: `${(form.file.size / 1024 / 1024).toFixed(2)} MB`, file: form.file };
+    setDocs(current => [documentRecord, ...current]);
+    setPath({ building: documentRecord.building, floor: documentRecord.floor, room: documentRecord.roomNumber, category: documentRecord.category });
+    setUploadOpen(false);
+    showToast(`${labels.uploaded}: ${form.file.name}`);
+  };
+  const handleDownload = doc => {
+    if (doc.file) { const url = URL.createObjectURL(doc.file); const anchor = document.createElement('a'); anchor.href = url; anchor.download = doc.name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    else downloadFile(`${doc.name}\n${labels.referenceNumber}: ${doc.reference}\n${labels.category}: ${displayCategory(doc.category)}\n${labels.date}: ${doc.date}`, `${doc.name}.txt`);
+  };
+  const handlePreview = doc => setSelectedDoc({ ...doc, previewUrl: doc.file ? URL.createObjectURL(doc.file) : null });
+  const markComplete = doc => setDocs(current => current.map(item => item.id === doc.id ? { ...item, status: 'completed', completedAt: today } : item));
+  const submitReason = event => {
+    event.preventDefault();
+    if (!reasonText.trim()) return;
+    setDocs(current => current.map(item => item.id === reasonDoc.id ? { ...item, status: 'archived', reasonReport: reasonText.trim(), archivedAt: today, archivedBy: userName } : item));
+    setReasonDoc(null); setReasonText('');
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center bg-slate-800/80 p-4 rounded-xl border border-slate-700">
-        <div>
-          <h2 className="font-bold text-base text-slate-100">ศูนย์เอกสารโครงการ (Document Hub)</h2>
-          <p className="text-xs text-slate-400">จัดเก็บเอกสารการตรวจรับ งานสถาปัตยกรรม และแบบแปลน</p>
-        </div>
-        <input id="document-upload" type="file" className="hidden" onChange={handleUpload} />
-        <button 
-          onClick={() => document.getElementById('document-upload')?.click()}
-          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2"
-        >
-          <Upload className="w-4 h-4" />
-          <span>อัปโหลดเอกสาร</span>
-        </button>
-      </div>
+  const drillItems = !path.building
+    ? buildingKeys.map(value => ({ value, label: displayBuilding(value), count: docs.filter(doc => doc.building === value).length }))
+    : !path.floor
+      ? floors.map(value => ({ value, label: `${labels.floor} ${value}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === value).length }))
+      : !path.room
+        ? rooms.filter(room => String(room.floor) === String(path.floor)).map(room => ({ value: String(room.roomNumber), label: `${labels.room} ${room.roomNumber}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(room.roomNumber)).length }))
+        : !path.category
+          ? ['Architecture', 'MEP', 'Structure'].map(value => ({ value, label: displayCategory(value), count: docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === value).length }))
+          : [];
+  const selectDrillItem = value => !path.building ? chooseBuilding(value) : !path.floor ? chooseFloor(value) : !path.room ? chooseRoom(value) : chooseCategory(value);
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {docs.map(doc => (
-          <div key={doc.id} className="bg-slate-800/70 border border-slate-700/80 p-4 rounded-xl flex flex-col justify-between">
-            <div className="flex items-start gap-3">
-              <FileText className="w-8 h-8 text-emerald-400 flex-shrink-0" />
-              <div>
-                <h4 className="font-semibold text-xs text-slate-200 line-clamp-2">{doc.name}</h4>
-                <span className="text-[10px] text-slate-400">{doc.category}</span>
-              </div>
-            </div>
+  return <div className="space-y-4 sm:space-y-6">
+    {reminders.length > 0 && <aside role="status" className="rounded-xl border border-amber-400/50 bg-amber-950/50 p-4 text-amber-100 shadow-lg"><div className="flex items-start gap-3"><Bell className="mt-0.5 h-5 w-5 shrink-0 text-amber-300"/><div><h2 className="text-sm font-bold">{labels.morningWarning}</h2><ul className="mt-2 space-y-1 text-xs">{reminders.map(doc => <li key={doc.id}>{doc.reference} · {doc.name} · {daysFrom(doc.scheduledDate || doc.date) === 0 ? labels.dueToday : labels.reminderDay.replace('{day}', String(daysFrom(doc.scheduledDate || doc.date)))}</li>)}</ul></div></div></aside>}
+    <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/80 p-4"><div><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p></div>{canEdit && <button type="button" onClick={openUpload} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"><Upload className="h-4 w-4"/>{labels.upload}</button>}</header>
 
-            <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-[11px] text-slate-400">
-              <span>{doc.size}</span>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setSelectedDoc(doc)}
-                  className="p-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                </button>
-                <button 
-                  onClick={() => handleDownload(doc)}
-                  className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+    <nav aria-label={lang === 'th' ? 'ลำดับตำแหน่งเอกสาร' : 'Document location hierarchy'} className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/70 p-3 text-xs">
+      {[['building', labels.building, path.building], ['floor', labels.floor, path.floor], ['room', labels.room, path.room], ['category', labels.category, path.category]].map(([level, label, value], index) => <React.Fragment key={level}>{index > 0 && <span className="px-1 text-slate-500">›</span>}<button type="button" disabled={!path[level]} onClick={() => resetPathTo(level)} className={`rounded-md px-2 py-1.5 ${path[level] ? 'text-emerald-300 hover:bg-slate-700' : 'text-slate-500'}`}>{value ? (level === 'building' ? displayBuilding(value) : level === 'category' ? displayCategory(value) : `${label} ${value}`) : label}</button></React.Fragment>)}
+    </nav>
 
-      {/* Document Preview Modal */}
-      {selectedDoc && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-6 space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-700 pb-3">
-              <h3 className="font-bold text-sm text-slate-100">{selectedDoc.name}</h3>
-              <button onClick={() => setSelectedDoc(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="h-48 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-700 text-slate-500 text-xs">
-              [ PDF / Excel Preview Viewer Placeholder ]
-            </div>
-            <div className="flex justify-end gap-2">
-              <button 
-                onClick={() => setSelectedDoc(null)}
-                className="px-4 py-2 bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg"
-              >
-                {t.common.close}
-              </button>
-              <button 
-                onClick={() => {
-                  handleDownload(selectedDoc);
-                  setSelectedDoc(null);
-                }}
-                className="px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg"
-              >
-                {t.common.export}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    {!path.category ? <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{drillItems.map(item => <button type="button" key={item.value} onClick={() => selectDrillItem(item.value)} className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/70 p-4 text-left hover:border-emerald-500/60 hover:bg-slate-800"><span className="flex min-w-0 items-center gap-3"><FolderKanban className="h-5 w-5 shrink-0 text-emerald-400"/><b className="truncate text-sm text-slate-100">{item.label}</b></span><span className="shrink-0 rounded-full bg-slate-900 px-2 py-1 text-[10px] text-slate-400">{item.count}</span></button>)}</section>
+      : <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 p-4"><h3 className="text-sm font-bold text-slate-100">{displayBuilding(path.building)} · {labels.floor} {path.floor} · {labels.room} {path.room} · {displayCategory(path.category)}</h3><span className="text-[10px] text-slate-400">{labels.referenceNumber} / {labels.date}</span></div>
+        {!docsAtPath.length ? <p className="p-6 text-center text-xs text-slate-400">{labels.empty}</p> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
+          const status = lifecycle(doc);
+          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}</div></div>
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status === 'expired' ? 'bg-red-500/15 text-red-300' : status === 'completed' ? 'bg-emerald-500/15 text-emerald-300' : status === 'archived' ? 'bg-slate-600/30 text-slate-300' : 'bg-amber-500/15 text-amber-300'}`}>{displayStatus(status)}</span><button type="button" onClick={() => handlePreview(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={labels.documentPreview} title={labels.documentPreview}><Eye className="h-4 w-4"/></button><button type="button" onClick={() => handleDownload(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={t.common.export} title={t.common.export}><Download className="h-4 w-4"/></button>{canEdit && status === 'pending' && doc.documentType === 'ri' && <button type="button" onClick={() => markComplete(doc)} className="rounded-md bg-emerald-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-emerald-600">{labels.markComplete}</button>}{canEdit && status === 'expired' && <button type="button" onClick={() => { setReasonDoc(doc); setReasonText(doc.reasonReport || ''); }} className="rounded-md bg-red-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-red-600">{labels.archive}</button>}</div>
+          </article>;
+        })}</div>}
+      </section>}
+
+    {uploadOpen && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-3 sm:p-5"><form onSubmit={submitUpload} className="my-auto max-h-[95vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-800 p-4 shadow-2xl sm:p-6"><div className="flex items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-100">{labels.upload}</h3><button type="button" onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 p-2 text-slate-300" aria-label={t.common.close}><X className="h-4 w-4"/></button></div>
+      <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs text-slate-300"><span>{labels.type}</span><select value={form.documentType} onChange={event => setForm(current => ({ ...current, documentType: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="general">{labels.typeGeneral}</option><option value="ri">{labels.typeRI}</option><option value="inspection">{labels.typeInspection}</option><option value="defect">{labels.typeDefect}</option></select></label>
+      <label className="space-y-1 text-xs text-slate-300"><span>{labels.reference}</span><input required value={form.reference} onChange={event => setForm(current => ({ ...current, reference: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"/></label>
+      <label className="space-y-1 text-xs text-slate-300"><span>{labels.building}</span><select value={form.building} onChange={event => setForm(current => ({ ...current, building: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="main">{displayBuilding('main')}</option><option value="annex">{displayBuilding('annex')}</option></select></label>
+      <label className="space-y-1 text-xs text-slate-300"><span>{labels.floor}</span><select value={form.floor} onChange={event => { const floor = event.target.value; setForm(current => ({ ...current, floor, roomNumber: String(rooms.find(room => String(room.floor) === floor)?.roomNumber || '') })); }} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{floors.map(floor => <option key={floor} value={floor}>{labels.floor} {floor}</option>)}</select></label>
+      <label className="space-y-1 text-xs text-slate-300"><span>{labels.room}</span><select required value={form.roomNumber} onChange={event => setForm(current => ({ ...current, roomNumber: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{roomOptions.map(room => <option key={room.id} value={room.roomNumber}>{labels.room} {room.roomNumber}</option>)}</select></label>
+      <label className="space-y-1 text-xs text-slate-300"><span>{labels.category}</span><select value={form.category} onChange={event => setForm(current => ({ ...current, category: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="Architecture">{labels.architecture}</option><option value="MEP">{labels.mep}</option><option value="Structure">{labels.structure}</option></select></label>
+      {form.documentType === 'ri' && <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.scheduledDate} *</span><input type="date" required min={today} value={form.scheduledDate} onChange={event => setForm(current => ({ ...current, scheduledDate: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"/></label>}
+      <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.file}</span><input type="file" required onChange={event => setForm(current => ({ ...current, file: event.target.files?.[0] || null }))} className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:text-white"/></label></div>
+      {formError && <p role="alert" className="text-xs font-semibold text-red-300">{formError}</p>}<div className="flex flex-col-reverse gap-2 border-t border-slate-700 pt-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200">{labels.cancel}</button><button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white">{labels.save}</button></div>
+    </form></div>}
+
+    {reasonDoc && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-3 sm:p-5"><form onSubmit={submitReason} className="w-full max-w-lg space-y-4 rounded-2xl border border-red-900 bg-slate-800 p-5 shadow-2xl sm:p-6"><div><h3 className="text-base font-bold text-red-200">{labels.expiredTitle}</h3><p className="mt-1 text-xs text-slate-400">{labels.expiredDescription}</p><p className="mt-2 text-xs text-slate-300">{reasonDoc.reference} · {reasonDoc.name}</p></div><label className="block space-y-1.5 text-xs font-semibold text-slate-200"><span>{labels.reasonLabel} *</span><textarea autoFocus required minLength={5} value={reasonText} onChange={event => setReasonText(event.target.value)} placeholder={labels.reasonPlaceholder} rows={5} className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-red-400 focus:outline-none"/></label><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setReasonDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200">{labels.cancel}</button><button type="submit" disabled={reasonText.trim().length < 5} className="rounded-lg bg-red-700 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{labels.archive}</button></div></form></div>}
+
+    {selectedDoc && <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/75 p-3 sm:p-5"><section role="dialog" aria-modal="true" aria-label={labels.documentPreview} className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-800"><header className="flex items-center justify-between gap-3 border-b border-slate-700 p-4"><div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-100">{labels.documentPreview}</h3><p className="truncate text-[10px] text-slate-400">{selectedDoc.reference} · {selectedDoc.name}</p></div><button type="button" onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 p-2 text-slate-200"><X className="h-4 w-4"/></button></header><div className="grid min-h-56 place-items-center bg-slate-950 p-3 text-center text-xs text-slate-400 sm:min-h-80">{selectedDoc.previewUrl && selectedDoc.file?.type.startsWith('image/') ? <img src={selectedDoc.previewUrl} alt={selectedDoc.name} className="max-h-[65vh] max-w-full object-contain"/> : selectedDoc.previewUrl && selectedDoc.file?.type === 'application/pdf' ? <iframe title={selectedDoc.name} src={selectedDoc.previewUrl} className="h-[65vh] w-full rounded bg-white"/> : <div><FileText className="mx-auto mb-2 h-9 w-9 text-emerald-400"/><p>{selectedDoc.name}</p><p className="mt-1">{displayType(selectedDoc.documentType)} · {displayStatus(lifecycle(selectedDoc))}</p></div>}</div><footer className="flex flex-col-reverse gap-2 border-t border-slate-700 p-3 sm:flex-row sm:justify-end"><button onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200">{t.common.close}</button><button onClick={() => { handleDownload(selectedDoc); setSelectedDoc(null); }} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white">{t.common.export}</button></footer></section></div>}
+  </div>;
 }
 
 // ==========================================
