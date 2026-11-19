@@ -13,7 +13,22 @@ const HISTORY_LOG_CACHE_KEY = 'trex_history_log_cache';
 const HISTORY_LOG_PENDING_KEY = 'trex_history_log_pending';
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const HISTORY_LOG_FIELDS = ['id', 'building', 'floor', 'room', 'trade', 'doc_no', 'doc_type', 'appointment_date', 'status', 'reason', 'file_name', 'file_url', 'folder_path', 'updated_at'];
-const PROJECT_BUILDING_NAME = 'Boutique Bangkok Sukhumvit 5';
+const BUILDING_A = 'อาคาร A';
+const BUILDING_B = 'อาคาร B';
+const BUILDING_VALUES = [BUILDING_A, BUILDING_B];
+const PROJECT_BUILDING_NAME = BUILDING_A;
+
+function canonicalBuilding(value, floor = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === BUILDING_B.toLowerCase() || normalized === 'building b' || normalized === 'annex' || normalized === 'annex building' || normalized === 'อาคารส่วนต่อขยาย') return BUILDING_B;
+  if (normalized === BUILDING_A.toLowerCase() || normalized === 'building a' || normalized === 'main' || normalized === 'main building' || normalized === 'อาคารหลัก' || normalized === 'boutique bangkok sukhumvit 5') return BUILDING_A;
+  if (value) return BUILDING_A;
+  return Number(floor) >= 5 ? BUILDING_B : BUILDING_A;
+}
+
+function canonicalizeRooms(rooms) {
+  return rooms.map(room => ({ ...room, building: canonicalBuilding(room.building, room.floor) }));
+}
 
 // --- DICTIONARY FOR BILINGUAL SUPPORT ---
 const i18n = {
@@ -28,7 +43,7 @@ const i18n = {
       engineerAccess: "จัดการการตรวจ เอกสาร สถานะ และรายงานได้", viewerAccess: "ดูแดชบอร์ด ผังชั้น ประวัติ และเอกสารได้เท่านั้น"
     },
     role: { engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", logout: "ออกจากระบบ", activeUser: "ผู้ใช้งานปัจจุบัน" },
-    sync: { synced: "ซิงก์แล้ว", syncing: "กำลังซิงก์...", offline: "ออฟไลน์ / ใช้ข้อมูลในเครื่อง", refresh: "รีเฟรช / ซิงก์", fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "ซิงก์ไม่สำเร็จ บันทึกข้อมูลไว้ในเครื่องแล้ว", syncFailed: "เชื่อมต่อ GAS ไม่สำเร็จ กำลังใช้ข้อมูลในเครื่อง", uploadSuccess: "บันทึกข้อมูลลง Google Drive และ HistoryLog แล้ว", lastSync: "ซิงก์ล่าสุด" },
+    sync: { synced: "ซิงก์แล้ว", syncing: "กำลังซิงก์...", offline: "ออฟไลน์ / ใช้ข้อมูลในเครื่อง", refresh: "รีเฟรช / ซิงก์", fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "ซิงก์ไม่สำเร็จ บันทึกข้อมูลไว้ในเครื่องแล้ว", syncFailed: "เชื่อมต่อ GAS ไม่สำเร็จ กำลังใช้ข้อมูลในเครื่อง", uploadSuccess: "บันทึกข้อมูลลง Google Drive และ HistoryLog แล้ว", lastSync: "ซิงก์ล่าสุด", uploading: "กำลังอัปโหลดและบันทึก...", uploadSuccessLink: "อัปโหลดสำเร็จ เปิดไฟล์ใน Google Drive" },
     documents: {
       title: "ศูนย์เอกสารโครงการ", subtitle: "เลือกตามอาคาร ชั้น ห้อง และหมวดงานเพื่อดูเอกสาร",
       upload: "อัปโหลดเอกสาร", type: "ประเภทเอกสาร", typeGeneral: "เอกสารทั่วไป", typeRI: "Request for Inspection (RI)", typeInspection: "รายงานการตรวจ", typeDefect: "รายงานข้อบกพร่อง",
@@ -41,7 +56,7 @@ const i18n = {
       expiredTitle: "รายงานเหตุผลที่ไม่ได้เข้าตรวจ", expiredDescription: "เอกสาร RI หมดอายุ กรุณาระบุเหตุผลก่อนจัดเก็บเอกสาร",
       reasonLabel: "เหตุผลที่ไม่ได้เข้าตรวจ", reasonPlaceholder: "อธิบายเหตุผลที่ไม่ได้เข้าตรวจ...", archive: "บันทึกเหตุผลและจัดเก็บ",
       archivedReason: "เหตุผลที่จัดเก็บ", documentPreview: "ตัวอย่างเอกสาร", uploaded: "อัปโหลดเอกสารแล้ว", allLevels: "ทั้งหมด",
-      buildingName: "อาคารหลัก", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"], openFile: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์"
+      buildingName: "อาคาร A", buildingA: "อาคาร A", buildingB: "อาคาร B", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"], openFile: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์"
     },
     records: {
       title: "ประวัติการตรวจแยกตามหมวดงาน", subtitle: "จัดกลุ่มตามงานตรวจ แล้วแยกตามอาคาร ชั้น และห้อง",
@@ -82,7 +97,7 @@ const i18n = {
     form: {
       room: "เลือกห้องพัก", task: "รายการตรวจ (13 งาน)", result: "ผลการตรวจ", inspector: "ชื่อผู้ตรวจงาน",
       passed: "ผ่าน", defect: "พบข้อบกพร่อง", inProgress: "รอตรวจ/กำลังแก้ไข",
-      roomOption: (room, floor) => `ห้อง ${room} (ชั้น ${floor})`,
+      roomOption: (room, floor, building) => `${building} · ห้อง ${room} (ชั้น ${floor})`,
       inspectionTitle: "ฟอร์มบันทึกการตรวจงาน", photo: "แนบภาพถ่ายหน้างาน", remarks: "หมายเหตุ / รายละเอียดการตรวจ",
       voice: "บันทึกเสียง", recording: "กำลังบันทึกเสียง...", submit: "บันทึกผลการตรวจ"
     },
@@ -123,7 +138,7 @@ const i18n = {
       engineerAccess: "Manage inspections, documents, statuses, and reports", viewerAccess: "View dashboard, floor map, records, and documents only"
     },
     role: { engineer: "Site Engineer", viewer: "Viewer / Guest", logout: "Log out", activeUser: "Signed in as" },
-    sync: { synced: "Synced", syncing: "Syncing...", offline: "Offline / Local Cache", refresh: "Refresh / Sync", fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Sync failed; the record is saved in the local cache.", syncFailed: "Could not connect to GAS. Showing the local cache.", uploadSuccess: "Saved to Google Drive and HistoryLog.", lastSync: "Last synced" },
+    sync: { synced: "Synced", syncing: "Syncing...", offline: "Offline / Local Cache", refresh: "Refresh / Sync", fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Sync failed; the record is saved in the local cache.", syncFailed: "Could not connect to GAS. Showing the local cache.", uploadSuccess: "Saved to Google Drive and HistoryLog.", lastSync: "Last synced", uploading: "Uploading and saving...", uploadSuccessLink: "Upload complete. Open in Google Drive" },
     documents: {
       title: "Project Document Hub", subtitle: "Drill down by building, floor, room, and work category",
       upload: "Upload Document", type: "Document Type", typeGeneral: "General Document", typeRI: "Request for Inspection (RI)", typeInspection: "Inspection Report", typeDefect: "Defect Report",
@@ -136,7 +151,7 @@ const i18n = {
       expiredTitle: "Non-Inspection Reason Report", expiredDescription: "This RI document has expired. Enter the reason before archiving it.",
       reasonLabel: "Reason for missed inspection", reasonPlaceholder: "Explain why the inspection was missed...", archive: "Save reason and archive",
       archivedReason: "Archive reason", documentPreview: "Document Preview", uploaded: "Document uploaded", allLevels: "All",
-      buildingName: "Main Building", workCategories: ["Architecture", "MEP", "Structure"], openFile: "Open file in Google Drive", folderPath: "Drive folder"
+      buildingName: "Building A", buildingA: "Building A", buildingB: "Building B", workCategories: ["Architecture", "MEP", "Structure"], openFile: "Open file in Google Drive", folderPath: "Drive folder"
     },
     records: {
       title: "Inspection History by Work Category", subtitle: "Grouped by inspection task, then by building, floor, and room",
@@ -177,7 +192,7 @@ const i18n = {
     form: {
       room: "Select Room", task: "Inspection Item (13 Tasks)", result: "Inspection Result", inspector: "Inspector Name",
       passed: "Passed", defect: "Defect Found", inProgress: "Ready / In Progress",
-      roomOption: (room, floor) => `Room ${room} (Floor ${floor})`,
+      roomOption: (room, floor, building) => `${building} · Room ${room} (Floor ${floor})`,
       inspectionTitle: "Room Inspection Form", photo: "Attach Site Photo", remarks: "Remarks / Inspection Details",
       voice: "Voice Note", recording: "Recording...", submit: "Submit Inspection Result"
     },
@@ -338,6 +353,7 @@ function normalizeHistoryLogRow(value = {}) {
     row[field] = value[field] ?? value[camel] ?? '';
   });
   row.id = String(row.id || row.doc_no || crypto.randomUUID());
+  row.building = canonicalBuilding(row.building, row.floor);
   row.floor = String(row.floor ?? '');
   row.room = String(row.room ?? '');
   return row;
@@ -371,7 +387,7 @@ function readLocalHistoryRows() {
 
 function historyRowToInspection(row, inspector = '') {
   return {
-    id: row.id, roomNumber: String(row.room), task: row.trade, status: row.status,
+    id: row.id, building: canonicalBuilding(row.building, row.floor), floor: String(row.floor || ''), roomNumber: String(row.room), task: row.trade, status: row.status,
     remarks: row.reason, date: row.updated_at, inspector,
     photo: row.doc_type === 'inspection' && row.file_url ? { name: row.file_name, type: '' } : null,
     riDocument: row.doc_type === 'ri' && row.file_url ? { name: row.file_name, type: '' } : null,
@@ -437,7 +453,7 @@ function legacyInspectionsToHistory(records, rooms) {
   return records.map(record => {
     const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber));
     return toHistoryLogRow({
-      id: record.id || crypto.randomUUID(), building: PROJECT_BUILDING_NAME, floor: room?.floor || '', room: record.roomNumber,
+      id: record.id || crypto.randomUUID(), building: canonicalBuilding(room?.building || PROJECT_BUILDING_NAME, room?.floor), floor: room?.floor || '', room: record.roomNumber,
       trade: record.task, docNo: record.id || `INS-${record.roomNumber}-${record.task}`, docType: 'inspection',
       status: record.status, reason: record.remarks || '', fileName: record.photo?.name || '', fileUrl: '',
       folderPath: '', updatedAt: record.date || new Date().toISOString(),
@@ -453,7 +469,7 @@ function historyRowsToInspections(rows, fallbackInspector = '') {
 function historyRowToDocument(row) {
   const rawType = String(row.doc_type || 'general').toLowerCase();
   const documentType = rawType.includes('ri') || rawType.includes('request') ? 'ri' : rawType.includes('defect') ? 'defect' : rawType.includes('inspection') ? 'inspection' : 'general';
-  const building = row.building === PROJECT_BUILDING_NAME || row.building === 'Main Building' ? 'main' : row.building || 'main';
+  const building = canonicalBuilding(row.building, row.floor);
   return {
     id: row.id, name: row.file_name || row.doc_no || `Document ${row.id}`, reference: row.doc_no,
     documentType, building, floor: String(row.floor || ''), roomNumber: String(row.room || ''),
@@ -468,12 +484,12 @@ function applyHistoryRowsToRooms(currentRooms, rows) {
   const byRoom = new Map();
   rows.filter(row => ['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()) && TASKS_13.includes(row.trade))
     .forEach(row => {
-      const key = String(row.room);
+      const key = `${canonicalBuilding(row.building, row.floor)}|${row.room}`;
       if (!byRoom.has(key)) byRoom.set(key, []);
       byRoom.get(key).push(row);
     });
   return currentRooms.map(room => {
-    const roomRows = byRoom.get(String(room.roomNumber));
+    const roomRows = byRoom.get(`${canonicalBuilding(room.building, room.floor)}|${room.roomNumber}`);
     if (!roomRows?.length) return room;
     const tasks = { ...room.tasks };
     roomRows.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at))).forEach(row => { tasks[row.trade] = row.status || 'pending'; });
@@ -604,6 +620,7 @@ const generateRoomsData = () => {
 
       rooms.push({
         id: roomNo,
+        building: floor <= 4 ? BUILDING_A : BUILDING_B,
         roomNumber: roomNo,
         floor: floor,
         type: type,
@@ -628,7 +645,7 @@ export default function App() {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rooms, setRooms] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('trex-rooms')) || generateRoomsData(); }
+    try { return canonicalizeRooms(JSON.parse(localStorage.getItem('trex-rooms')) || generateRoomsData()); }
     catch { return generateRoomsData(); }
   });
   const [historyRows, setHistoryRows] = useState(() => {
@@ -665,9 +682,9 @@ export default function App() {
     catch (error) { console.warn('Could not update HistoryLog cache:', error); }
   }, [historyRows]);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+  const showToast = (msg, link = '') => {
+    setToastMessage({ message: msg, link });
+    setTimeout(() => setToastMessage(null), link ? 9000 : 4500);
   };
 
   const handleLogin = (user) => {
@@ -694,7 +711,12 @@ export default function App() {
           try {
             const payload = await readPendingHistoryPayload(id);
             if (!payload) { await clearPendingHistoryPayload(id); continue; }
-            const saved = await postHistoryLogToGas(payload);
+            let retryPayload = payload;
+            if (payload.pendingFile) {
+              const { pendingFile, ...metadata } = payload;
+              retryPayload = payload.fileData ? metadata : { ...metadata, fileData: await fileToBase64(pendingFile), fileName: metadata.fileName || metadata.file_name, mimeType: pendingFile.type || 'application/octet-stream' };
+            }
+            const saved = await postHistoryLogToGas(retryPayload);
             remoteRows = mergeHistoryRows([saved], remoteRows);
             await clearPendingHistoryPayload(id);
           } catch (retryError) {
@@ -719,7 +741,7 @@ export default function App() {
       setSyncError(true);
       return null;
     }
-  }, [session?.role, session?.name, lang]);
+  }, [session, lang]);
 
   useEffect(() => {
     if (session) refreshHistory(session.role === 'engineer');
@@ -732,16 +754,19 @@ export default function App() {
       return null;
     }
     let row = normalizeHistoryLogRow(inputRow);
+    if (file) {
+      const fileName = buildDriveFileName(row.building, row.floor, row.room, row.doc_no, file.name);
+      row = normalizeHistoryLogRow({ ...row, file_name: fileName });
+    }
     let payload = { ...row };
+    const cached = mergeHistoryRows([row], readLocalHistoryRows());
+    setHistoryRows(cached);
+    try { localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(cached)); }
+    catch (error) { console.warn('Could not persist HistoryLog cache:', error); }
     try {
       if (file) {
-        const fileName = buildDriveFileName(row.building, row.floor, row.room, row.doc_no, file.name);
-        row = normalizeHistoryLogRow({ ...row, file_name: fileName });
-        payload = { ...row, fileData: await fileToBase64(file), fileName, mimeType: file.type || 'application/octet-stream' };
+        payload = { ...row, fileData: await fileToBase64(file), fileName: row.file_name, mimeType: file.type || 'application/octet-stream' };
       }
-      const cached = mergeHistoryRows([row], readLocalHistoryRows());
-      setHistoryRows(cached);
-      localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(cached));
       setSyncStatus('syncing');
       setSyncError(false);
       const savedRow = await postHistoryLogToGas(payload);
@@ -760,19 +785,18 @@ export default function App() {
       }
       setSyncStatus('synced');
       setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
-      return savedRow;
+      return { ...savedRow, _savedToBackend: true };
     } catch (error) {
       console.warn('GAS write failed; retaining the local HistoryLog row:', error);
       try {
-        await savePendingHistoryPayload(row.id, payload);
+        await savePendingHistoryPayload(row.id, file && !payload.fileData ? { ...payload, pendingFile: file } : payload);
         writePendingHistoryIds([...readPendingHistoryIds(), row.id]);
       } catch (queueError) {
         console.warn('Could not queue the record for a later sync:', queueError);
       }
       setSyncStatus('offline');
       setSyncError(true);
-      showToast(i18n[lang].sync.uploadFailed);
-      return row;
+      return { ...row, _savedToBackend: false };
     }
   }, [session, lang]);
 
@@ -784,7 +808,7 @@ export default function App() {
       showToast(i18n[lang].sync.uploadFailed);
     }
     const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber));
-    const building = room?.building || PROJECT_BUILDING_NAME;
+    const building = canonicalBuilding(room?.building || PROJECT_BUILDING_NAME, room?.floor);
     const base = {
       building, floor: room?.floor || '', room: record.roomNumber, trade: record.task,
       docNo: `INS-${record.id}`, docType: 'inspection', status: record.status,
@@ -800,12 +824,15 @@ export default function App() {
       const defects = Object.values(tasks).filter(value => value === 'defect').length;
       return { ...currentRoom, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects, status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: record.date, lastInspector: record.inspector };
     }));
-    await persistHistoryRecord(primaryRow, evidence?.photo || null);
+    const savedPhoto = await persistHistoryRecord(primaryRow, evidence?.photo || null);
+    let savedRi = null;
     if (evidence?.ri) {
       const riRow = toHistoryLogRow({ ...base, id: `${record.id}-ri`, docNo: `RI-${record.id}`, docType: 'ri', fileName: evidence.ri.name });
-      await persistHistoryRecord(riRow, evidence.ri);
+      savedRi = await persistHistoryRecord(riRow, evidence.ri);
     }
-    showToast(lang === 'th' ? `บันทึกผลตรวจห้อง ${record.roomNumber} สำเร็จ` : `Saved inspection for Room ${record.roomNumber}`);
+    const success = savedPhoto?._savedToBackend && (!evidence?.ri || savedRi?._savedToBackend);
+    if (success) showToast(lang === 'th' ? `บันทึกผลตรวจห้อง ${record.roomNumber} สำเร็จ` : `Saved inspection for Room ${record.roomNumber}`, savedPhoto?.file_url || savedRi?.file_url || '');
+    else showToast(i18n[lang].sync.uploadFailed);
   }, [session, rooms, persistHistoryRecord, lang]);
 
   // KPI Computations
@@ -846,9 +873,10 @@ export default function App() {
     <div className="flex h-screen overflow-hidden bg-slate-900 font-sans text-slate-100">
       {/* Toast Alert Banner */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-emerald-600 text-white px-5 py-3 rounded-lg shadow-2xl border border-emerald-400 animate-bounce">
-          <CheckCircle2 className="w-5 h-5" />
-          <span className="font-medium text-sm">{toastMessage}</span>
+        <div role="status" className="fixed left-3 right-3 top-5 z-50 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-400 bg-emerald-700 px-4 py-3 text-white shadow-2xl sm:left-auto sm:right-5 sm:max-w-lg">
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
+          <span className="min-w-0 flex-1 text-sm font-medium">{toastMessage.message}</span>
+          {toastMessage.link && <a href={toastMessage.link} target="_blank" rel="noreferrer" className="text-xs font-bold underline underline-offset-2">{t.documents.openFile}</a>}
         </div>
       )}
 
@@ -958,7 +986,7 @@ export default function App() {
 
             {/* Quick Action Notification Button */}
             <button 
-              onClick={() => showToast(lang === 'th' ? "การแจ้งเตือนล่าสุด: ตรวจสอบห้อง 412 เรียบร้อย" : "Notification: Room 412 inspected")}
+              onClick={() => { setActiveTab('inspectionRecords'); showToast(t.records.title); }}
               className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white relative"
             >
               <Bell className="w-4 h-4" />
@@ -1306,6 +1334,7 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
   const [isRecording, setIsRecording] = useState(false);
   const [riFile, setRiFile] = useState(null);
   const [riVerification, setRiVerification] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
@@ -1356,10 +1385,13 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
     }, 2500);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const id = crypto.randomUUID();
-    onSubmitInspection({ id, roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: riFile ? { name: riFile.name, type: riFile.type, size: riFile.size, verification: riVerification } : null }, { photo: photoFile, ri: riFile });
+    setIsSubmitting(true);
+    try {
+      await onSubmitInspection({ id, roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: riFile ? { name: riFile.name, type: riFile.type, size: riFile.size, verification: riVerification } : null }, { photo: photoFile, ri: riFile });
     setRemarks('');
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
@@ -1367,6 +1399,9 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
     setAiScore(null);
     setRiFile(null);
     setRiVerification('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -1386,7 +1421,7 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             >
               {rooms.map(r => (
-                <option key={r.id} value={r.roomNumber}>{labels.roomOption(r.roomNumber, r.floor)}</option>
+                <option key={r.id} value={r.roomNumber}>{labels.roomOption(r.roomNumber, r.floor, lang === 'th' ? (r.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA) : (r.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA))}</option>
               ))}
             </select>
           </div>
@@ -1468,6 +1503,7 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
             <button
               type="button"
               onClick={handleVoiceRecord}
+              disabled={isSubmitting || isRecording}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold ${
                 isRecording ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
               }`}
@@ -1480,16 +1516,17 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
             rows={4}
             value={remarks}
             onChange={(e) => setRemarks(e.target.value)}
-            placeholder="กรอกรายละเอียด หรือใช้ปุ่มบันทึกเสียงด้านบน..."
+          placeholder={lang === 'th' ? "กรอกรายละเอียด หรือใช้ปุ่มบันทึกเสียงด้านบน..." : "Enter remarks or use the voice recording button above..."}
             className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
           ></textarea>
         </div>
 
         <button
           type="submit"
+          disabled={isSubmitting}
           className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg text-sm"
         >
-          {labels.submit}
+          {isSubmitting ? i18n[lang].sync.uploading : labels.submit}
         </button>
       </form>
     </div>
@@ -1501,11 +1538,12 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
 // ==========================================
 function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
   const labels = t.records;
+  const displayBuilding = value => canonicalBuilding(value) === BUILDING_B ? t.documents.buildingB : t.documents.buildingA;
   const categories = [...new Set([...TASKS_13, ...records.map(record => record.task).filter(Boolean)])];
   const byLocation = entries => {
     const buildings = new Map();
     entries.forEach(entry => {
-      const building = entry.building || t.documents.buildingName;
+      const building = canonicalBuilding(entry.building, entry.floor);
       if (!buildings.has(building)) buildings.set(building, new Map());
       const floors = buildings.get(building);
       const floor = String(entry.floor ?? rooms.find(room => String(room.roomNumber) === String(entry.roomNumber))?.floor ?? '—');
@@ -1527,7 +1565,7 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
         return <details key={task} open={index === 0 && records.length > 0} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
           <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-slate-700/30"><span className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-xs font-bold text-emerald-400">{index + 1}</span><b className="text-sm text-slate-100">{task}</b></span><span className="text-[10px] text-slate-400">{labels.recordCount.replace('{count}', taskRecords.length)}</span></summary>
           <div className="space-y-3 border-t border-slate-700 p-3 sm:p-4">
-            {grouped.size === 0 ? <p className="rounded-lg bg-slate-900/60 p-4 text-xs text-slate-400">{labels.noRecords}</p> : [...grouped.entries()].map(([building, floors]) => <section key={building} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"><h3 className="mb-3 text-xs font-bold text-emerald-300">{labels.building}: {building}</h3>
+            {grouped.size === 0 ? <p className="rounded-lg bg-slate-900/60 p-4 text-xs text-slate-400">{labels.noRecords}</p> : [...grouped.entries()].map(([building, floors]) => <section key={building} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"><h3 className="mb-3 text-xs font-bold text-emerald-300">{labels.building}: {displayBuilding(building)}</h3>
               <div className="space-y-3">{[...floors.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([floor, floorRooms]) => <div key={floor}><h4 className="mb-2 text-[11px] font-semibold text-slate-300">{labels.floor} {floor}</h4><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{[...floorRooms.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([roomNumber, roomRecords]) => {
                 const room = rooms.find(item => String(item.roomNumber) === roomNumber);
                 return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p>{record.file_url && <a href={record.file_url} target="_blank" rel="noreferrer" className="mt-2 inline-block font-semibold text-sky-300 underline">{labels.fileLink}</a>}{record.folder_path && <p className="mt-1 break-all text-slate-500">{labels.folderPath}: {record.folder_path}</p>}</div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
@@ -1546,13 +1584,13 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
 function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, historyRows = [], onRecordSaved }) {
   const labels = t.documents;
   const sampleDocs = () => [
-    { id: 'seed-1', name: 'Inspection_Report_Floor_4_Q3.pdf', reference: 'INS-2026-004', documentType: 'inspection', building: 'main', floor: '4', roomNumber: '401', category: 'Architecture', date: getLocalDateString(), status: 'completed', size: '3.4 MB' },
-    { id: 'seed-2', name: 'Defect_Summary_Boutique_Sukhumvit5.xlsx', reference: 'DEF-2026-002', documentType: 'defect', building: 'main', floor: '5', roomNumber: '502', category: 'MEP', date: getLocalDateString(), status: 'completed', size: '1.2 MB' },
-    { id: 'seed-3', name: 'RI_Architectural_Specs_V2.pdf', reference: 'RI-2026-003', documentType: 'ri', building: 'main', floor: '6', roomNumber: '603', category: 'Architecture', date: getLocalDateString(), scheduledDate: getLocalDateString(), status: 'pending', size: '8.9 MB' },
-    { id: 'seed-4', name: 'Handover_Certificate_Floor_1-2.pdf', reference: 'STR-2026-001', documentType: 'general', building: 'main', floor: '1', roomNumber: '101', category: 'Structure', date: getLocalDateString(), status: 'completed', size: '4.1 MB' }
+    { id: 'seed-1', name: 'Inspection_Report_Floor_4_Q3.pdf', reference: 'INS-2026-004', documentType: 'inspection', building: BUILDING_A, floor: '4', roomNumber: '401', category: 'Architecture', date: getLocalDateString(), status: 'completed', size: '3.4 MB' },
+    { id: 'seed-2', name: 'Defect_Summary_Boutique_Sukhumvit5.xlsx', reference: 'DEF-2026-002', documentType: 'defect', building: BUILDING_B, floor: '5', roomNumber: '502', category: 'MEP', date: getLocalDateString(), status: 'completed', size: '1.2 MB' },
+    { id: 'seed-3', name: 'RI_Architectural_Specs_V2.pdf', reference: 'RI-2026-003', documentType: 'ri', building: BUILDING_B, floor: '6', roomNumber: '603', category: 'Architecture', date: getLocalDateString(), scheduledDate: getLocalDateString(), status: 'pending', size: '4.9 MB' },
+    { id: 'seed-4', name: 'Handover_Certificate_Floor_1-2.pdf', reference: 'STR-2026-001', documentType: 'general', building: BUILDING_A, floor: '1', roomNumber: '101', category: 'Structure', date: getLocalDateString(), status: 'completed', size: '4.1 MB' }
   ];
   const [docs, setDocs] = useState(() => {
-    try { const stored = JSON.parse(localStorage.getItem('trex-documents')); return Array.isArray(stored) && stored.length ? expireDueRiDocuments(stored) : sampleDocs(); }
+    try { const stored = JSON.parse(localStorage.getItem('trex-documents')); return Array.isArray(stored) && stored.length ? expireDueRiDocuments(stored.map(doc => ({ ...doc, building: canonicalBuilding(doc.building, doc.floor) }))) : sampleDocs(); }
     catch { return sampleDocs(); }
   });
   const [path, setPath] = useState({ building: null, floor: null, room: null, category: null });
@@ -1563,10 +1601,11 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
   const [formError, setFormError] = useState('');
   const [today, setToday] = useState(() => getLocalDateString());
   const lastCheckedDate = useRef(today);
-  const [form, setForm] = useState({ documentType: 'general', building: 'main', floor: '1', roomNumber: '', category: 'Architecture', reference: '', scheduledDate: '', file: null });
+  const [form, setForm] = useState({ documentType: 'general', building: BUILDING_A, floor: '1', roomNumber: '', category: 'Architecture', reference: '', scheduledDate: '', file: null });
+  const [savingUpload, setSavingUpload] = useState(false);
 
   const docToHistoryRow = (doc, overrides = {}) => toHistoryLogRow({
-    id: doc.id, building: doc.building === 'main' ? PROJECT_BUILDING_NAME : doc.building,
+    id: doc.id, building: canonicalBuilding(doc.building, doc.floor),
     floor: doc.floor, room: doc.roomNumber, trade: doc.category,
     docNo: doc.reference, docType: doc.documentType, appointmentDate: doc.scheduledDate || '',
     status: overrides.status || doc.status, reason: overrides.reason ?? doc.reasonReport ?? '',
@@ -1604,10 +1643,14 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
   }, [docs]);
   useEffect(() => () => { if (selectedDoc?.previewUrl) URL.revokeObjectURL(selectedDoc.previewUrl); }, [selectedDoc]);
 
-  const buildingKeys = [...new Set(['main', 'annex', ...docs.map(doc => doc.building).filter(Boolean)])];
-  const floors = [...new Set(rooms.map(room => String(room.floor)))].sort((a, b) => Number(a) - Number(b));
-  const roomOptions = rooms.filter(room => String(room.floor) === String(form.floor));
-  const displayBuilding = key => key === 'main' ? labels.buildingName : key === 'annex' ? (lang === 'th' ? 'อาคารส่วนต่อขยาย' : 'Annex Building') : key;
+  const buildingKeys = BUILDING_VALUES;
+  const floorsForBuilding = building => [...new Set([
+    ...rooms.filter(room => canonicalBuilding(room.building, room.floor) === building).map(room => String(room.floor)),
+    ...docs.filter(doc => canonicalBuilding(doc.building, doc.floor) === building).map(doc => String(doc.floor)),
+  ])].sort((a, b) => Number(a) - Number(b));
+  const floors = floorsForBuilding(form.building);
+  const roomOptions = rooms.filter(room => canonicalBuilding(room.building, room.floor) === form.building && String(room.floor) === String(form.floor));
+  const displayBuilding = key => canonicalBuilding(key) === BUILDING_B ? labels.buildingB : labels.buildingA;
   const displayCategory = key => key === 'Architecture' ? labels.architecture : key === 'MEP' ? labels.mep : labels.structure;
   const displayType = key => ({ ri: labels.typeRI, inspection: labels.typeInspection, defect: labels.typeDefect, general: labels.typeGeneral })[key] || labels.typeGeneral;
   const displayStatus = key => ({ pending: labels.statusPending, completed: labels.statusCompleted, expired: labels.statusExpired, archived: labels.statusArchived })[key] || labels.statusPending;
@@ -1629,23 +1672,35 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
 
   const openUpload = () => {
     const nextReference = `DOC-${today.slice(0, 4)}-${String(docs.length + 1).padStart(4, '0')}`;
-    const initialFloor = floors[0] || '1';
-    const initialRoom = rooms.find(room => String(room.floor) === initialFloor)?.roomNumber || '';
-    setForm({ documentType: 'general', building: 'main', floor: initialFloor, roomNumber: initialRoom, category: 'Architecture', reference: nextReference, scheduledDate: '', file: null });
+    const initialBuilding = BUILDING_A;
+    const initialFloor = floorsForBuilding(initialBuilding)[0] || '1';
+    const initialRoom = rooms.find(room => canonicalBuilding(room.building, room.floor) === initialBuilding && String(room.floor) === initialFloor)?.roomNumber || '';
+    setForm({ documentType: 'general', building: initialBuilding, floor: initialFloor, roomNumber: initialRoom, category: 'Architecture', reference: nextReference, scheduledDate: '', file: null });
     setFormError('');
     setUploadOpen(true);
   };
-  const submitUpload = event => {
+  const submitUpload = async event => {
     event.preventDefault();
+    if (savingUpload) return;
     if (!form.file || !form.floor || !form.roomNumber || !form.category || (form.documentType === 'ri' && (!form.scheduledDate || form.scheduledDate < today))) { setFormError(labels.required); return; }
     if (form.file.size > MAX_UPLOAD_BYTES) { setFormError(t.sync.fileTooLarge); return; }
     const documentRecord = { id: crypto.randomUUID(), name: form.file.name, reference: form.reference.trim() || `DOC-${today.replaceAll('-', '')}`, documentType: form.documentType, building: form.building, floor: String(form.floor), roomNumber: String(form.roomNumber), category: form.category, date: today, scheduledDate: form.documentType === 'ri' ? form.scheduledDate : null, status: 'pending', size: `${(form.file.size / 1024 / 1024).toFixed(2)} MB`, file: form.file };
     setDocs(current => [documentRecord, ...current]);
     setPath({ building: documentRecord.building, floor: documentRecord.floor, room: documentRecord.roomNumber, category: documentRecord.category });
-    setUploadOpen(false);
-    void onRecordSaved(docToHistoryRow(documentRecord), form.file).then(saved => {
+    setSavingUpload(true);
+    try {
+      const saved = await onRecordSaved(docToHistoryRow(documentRecord), form.file);
       if (saved) setDocs(current => current.map(doc => doc.id === documentRecord.id ? { ...doc, file_url: saved.file_url || doc.file_url, folder_path: saved.folder_path || doc.folder_path, file_name: saved.file_name || doc.file_name } : doc));
-    });
+      if (saved?._savedToBackend && saved.file_url) showToast(t.sync.uploadSuccessLink, saved.file_url);
+      else if (saved?._savedToBackend) showToast(t.sync.uploadSuccess);
+      else showToast(t.sync.uploadFailed);
+      setUploadOpen(false);
+    } catch (error) {
+      console.error('Document upload failed:', error);
+      setFormError(t.sync.uploadFailed);
+    } finally {
+      setSavingUpload(false);
+    }
   };
   const handleDownload = doc => {
     if (doc.file) { const url = URL.createObjectURL(doc.file); const anchor = document.createElement('a'); anchor.href = url; anchor.download = doc.name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -1667,12 +1722,17 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
     setReasonDoc(null); setReasonText('');
   };
 
+  const floorsAtPath = path.building ? floorsForBuilding(path.building) : [];
+  const roomNumbersAtPath = path.building && path.floor ? [...new Set([
+    ...rooms.filter(room => canonicalBuilding(room.building, room.floor) === path.building && String(room.floor) === String(path.floor)).map(room => String(room.roomNumber)),
+    ...docs.filter(doc => canonicalBuilding(doc.building, doc.floor) === path.building && String(doc.floor) === String(path.floor)).map(doc => String(doc.roomNumber)),
+  ])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) : [];
   const drillItems = !path.building
     ? buildingKeys.map(value => ({ value, label: displayBuilding(value), count: docs.filter(doc => doc.building === value).length }))
     : !path.floor
-      ? floors.map(value => ({ value, label: `${labels.floor} ${value}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === value).length }))
+      ? floorsAtPath.map(value => ({ value, label: `${labels.floor} ${value}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === value).length }))
       : !path.room
-        ? rooms.filter(room => String(room.floor) === String(path.floor)).map(room => ({ value: String(room.roomNumber), label: `${labels.room} ${room.roomNumber}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(room.roomNumber)).length }))
+        ? roomNumbersAtPath.map(value => ({ value, label: `${labels.room} ${value}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === value).length }))
         : !path.category
           ? ['Architecture', 'MEP', 'Structure'].map(value => ({ value, label: displayCategory(value), count: docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === value).length }))
           : [];
@@ -1700,13 +1760,13 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
     {uploadOpen && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-3 sm:p-5"><form onSubmit={submitUpload} className="my-auto max-h-[95vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-800 p-4 shadow-2xl sm:p-6"><div className="flex items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-100">{labels.upload}</h3><button type="button" onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 p-2 text-slate-300" aria-label={t.common.close}><X className="h-4 w-4"/></button></div>
       <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs text-slate-300"><span>{labels.type}</span><select value={form.documentType} onChange={event => setForm(current => ({ ...current, documentType: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="general">{labels.typeGeneral}</option><option value="ri">{labels.typeRI}</option><option value="inspection">{labels.typeInspection}</option><option value="defect">{labels.typeDefect}</option></select></label>
       <label className="space-y-1 text-xs text-slate-300"><span>{labels.reference}</span><input required value={form.reference} onChange={event => setForm(current => ({ ...current, reference: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"/></label>
-      <label className="space-y-1 text-xs text-slate-300"><span>{labels.building}</span><select value={form.building} onChange={event => setForm(current => ({ ...current, building: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="main">{displayBuilding('main')}</option><option value="annex">{displayBuilding('annex')}</option></select></label>
-      <label className="space-y-1 text-xs text-slate-300"><span>{labels.floor}</span><select value={form.floor} onChange={event => { const floor = event.target.value; setForm(current => ({ ...current, floor, roomNumber: String(rooms.find(room => String(room.floor) === floor)?.roomNumber || '') })); }} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{floors.map(floor => <option key={floor} value={floor}>{labels.floor} {floor}</option>)}</select></label>
+      <label className="space-y-1 text-xs text-slate-300"><span>{labels.building}</span><select value={form.building} onChange={event => { const building = event.target.value; const floor = floorsForBuilding(building)[0] || ''; const roomNumber = rooms.find(room => canonicalBuilding(room.building, room.floor) === building && String(room.floor) === floor)?.roomNumber || ''; setForm(current => ({ ...current, building, floor, roomNumber: String(roomNumber) })); }} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{buildingKeys.map(building => <option key={building} value={building}>{displayBuilding(building)}</option>)}</select></label>
+      <label className="space-y-1 text-xs text-slate-300"><span>{labels.floor}</span><select value={form.floor} onChange={event => { const floor = event.target.value; setForm(current => ({ ...current, floor, roomNumber: String(rooms.find(room => canonicalBuilding(room.building, room.floor) === current.building && String(room.floor) === floor)?.roomNumber || '') })); }} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{floors.map(floor => <option key={floor} value={floor}>{labels.floor} {floor}</option>)}</select></label>
       <label className="space-y-1 text-xs text-slate-300"><span>{labels.room}</span><select required value={form.roomNumber} onChange={event => setForm(current => ({ ...current, roomNumber: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{roomOptions.map(room => <option key={room.id} value={room.roomNumber}>{labels.room} {room.roomNumber}</option>)}</select></label>
       <label className="space-y-1 text-xs text-slate-300"><span>{labels.category}</span><select value={form.category} onChange={event => setForm(current => ({ ...current, category: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="Architecture">{labels.architecture}</option><option value="MEP">{labels.mep}</option><option value="Structure">{labels.structure}</option></select></label>
       {form.documentType === 'ri' && <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.scheduledDate} *</span><input type="date" required min={today} value={form.scheduledDate} onChange={event => setForm(current => ({ ...current, scheduledDate: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"/></label>}
-      <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.file}</span><input type="file" required onChange={event => setForm(current => ({ ...current, file: event.target.files?.[0] || null }))} className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:text-white"/></label></div>
-      {formError && <p role="alert" className="text-xs font-semibold text-red-300">{formError}</p>}<div className="flex flex-col-reverse gap-2 border-t border-slate-700 pt-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200">{labels.cancel}</button><button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white">{labels.save}</button></div>
+      <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.file}</span><input type="file" accept="application/pdf,image/*" required disabled={savingUpload} onChange={event => { const file = event.target.files?.[0] || null; if (file && file.size > MAX_UPLOAD_BYTES) { setForm(current => ({ ...current, file: null })); setFormError(t.sync.fileTooLarge); event.target.value = ''; return; } setFormError(''); setForm(current => ({ ...current, file })); }} className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:text-white disabled:opacity-50"/></label></div>
+      {savingUpload && <div role="status" className="rounded-lg border border-sky-500/30 bg-sky-950/30 px-3 py-2 text-xs text-sky-200"><span className="mb-2 block">{t.sync.uploading}</span><div className="h-1.5 overflow-hidden rounded-full bg-slate-700"><div className="h-full w-2/3 animate-pulse rounded-full bg-sky-400" /></div></div>}{formError && <p role="alert" className="text-xs font-semibold text-red-300">{formError}</p>}<div className="flex flex-col-reverse gap-2 border-t border-slate-700 pt-3 sm:flex-row sm:justify-end"><button type="button" disabled={savingUpload} onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200 disabled:opacity-50">{labels.cancel}</button><button type="submit" disabled={savingUpload} className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-wait disabled:opacity-60">{savingUpload ? t.sync.uploading : labels.save}</button></div>
     </form></div>}
 
     {reasonDoc && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-3 sm:p-5"><form onSubmit={submitReason} className="w-full max-w-lg space-y-4 rounded-2xl border border-red-900 bg-slate-800 p-5 shadow-2xl sm:p-6"><div><h3 className="text-base font-bold text-red-200">{labels.expiredTitle}</h3><p className="mt-1 text-xs text-slate-400">{labels.expiredDescription}</p><p className="mt-2 text-xs text-slate-300">{reasonDoc.reference} · {reasonDoc.name}</p></div><label className="block space-y-1.5 text-xs font-semibold text-slate-200"><span>{labels.reasonLabel} *</span><textarea autoFocus required minLength={5} value={reasonText} onChange={event => setReasonText(event.target.value)} placeholder={labels.reasonPlaceholder} rows={5} className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-red-400 focus:outline-none"/></label><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setReasonDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200">{labels.cancel}</button><button type="submit" disabled={reasonText.trim().length < 5} className="rounded-lg bg-red-700 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{labels.archive}</button></div></form></div>}
