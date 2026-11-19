@@ -1,12 +1,19 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import roomPlanImage from './assets/room-plan-reference.jpg';
 import { 
   Building2, LayoutDashboard, Grid, ClipboardCheck, History, FolderKanban, 
   Bot, CheckCircle2, AlertTriangle, Clock, Search, 
   Upload, Mic, FileText, Download, Eye, Languages, 
-  Bell, Sparkles, X, FileSpreadsheet, Menu, LogOut,
+  Bell, Sparkles, X, FileSpreadsheet, Menu, LogOut, RefreshCw,
   Camera, FileDown as FilePdf
 } from 'lucide-react';
+
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzZx_5vITCaQpsfXqMjNOimB6CUEIg9FJVGHkIRBLEMHD2Y4wSObghI9n5dKESQvnWhQA/exec';
+const HISTORY_LOG_CACHE_KEY = 'trex_history_log_cache';
+const HISTORY_LOG_PENDING_KEY = 'trex_history_log_pending';
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const HISTORY_LOG_FIELDS = ['id', 'building', 'floor', 'room', 'trade', 'doc_no', 'doc_type', 'appointment_date', 'status', 'reason', 'file_name', 'file_url', 'folder_path', 'updated_at'];
+const PROJECT_BUILDING_NAME = 'Boutique Bangkok Sukhumvit 5';
 
 // --- DICTIONARY FOR BILINGUAL SUPPORT ---
 const i18n = {
@@ -21,6 +28,7 @@ const i18n = {
       engineerAccess: "จัดการการตรวจ เอกสาร สถานะ และรายงานได้", viewerAccess: "ดูแดชบอร์ด ผังชั้น ประวัติ และเอกสารได้เท่านั้น"
     },
     role: { engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", logout: "ออกจากระบบ", activeUser: "ผู้ใช้งานปัจจุบัน" },
+    sync: { synced: "ซิงก์แล้ว", syncing: "กำลังซิงก์...", offline: "ออฟไลน์ / ใช้ข้อมูลในเครื่อง", refresh: "รีเฟรช / ซิงก์", fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "ซิงก์ไม่สำเร็จ บันทึกข้อมูลไว้ในเครื่องแล้ว", syncFailed: "เชื่อมต่อ GAS ไม่สำเร็จ กำลังใช้ข้อมูลในเครื่อง", uploadSuccess: "บันทึกข้อมูลลง Google Drive และ HistoryLog แล้ว", lastSync: "ซิงก์ล่าสุด" },
     documents: {
       title: "ศูนย์เอกสารโครงการ", subtitle: "เลือกตามอาคาร ชั้น ห้อง และหมวดงานเพื่อดูเอกสาร",
       upload: "อัปโหลดเอกสาร", type: "ประเภทเอกสาร", typeGeneral: "เอกสารทั่วไป", typeRI: "Request for Inspection (RI)", typeInspection: "รายงานการตรวจ", typeDefect: "รายงานข้อบกพร่อง",
@@ -33,12 +41,12 @@ const i18n = {
       expiredTitle: "รายงานเหตุผลที่ไม่ได้เข้าตรวจ", expiredDescription: "เอกสาร RI หมดอายุ กรุณาระบุเหตุผลก่อนจัดเก็บเอกสาร",
       reasonLabel: "เหตุผลที่ไม่ได้เข้าตรวจ", reasonPlaceholder: "อธิบายเหตุผลที่ไม่ได้เข้าตรวจ...", archive: "บันทึกเหตุผลและจัดเก็บ",
       archivedReason: "เหตุผลที่จัดเก็บ", documentPreview: "ตัวอย่างเอกสาร", uploaded: "อัปโหลดเอกสารแล้ว", allLevels: "ทั้งหมด",
-      buildingName: "อาคารหลัก", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"]
+      buildingName: "อาคารหลัก", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"], openFile: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์"
     },
     records: {
       title: "ประวัติการตรวจแยกตามหมวดงาน", subtitle: "จัดกลุ่มตามงานตรวจ แล้วแยกตามอาคาร ชั้น และห้อง",
       allCategories: "ทุกหมวดงาน", noRecords: "ยังไม่มีประวัติการตรวจในหมวดงานนี้", building: "อาคาร", floor: "ชั้น", room: "ห้อง",
-      inspectionDate: "วันที่ตรวจ", inspector: "ผู้ตรวจ", result: "ผลตรวจ", openRoom: "ดูรายละเอียดห้อง", roomCount: "{count} ห้อง", recordCount: "{count} รายการ"
+      inspectionDate: "วันที่ตรวจ", inspector: "ผู้ตรวจ", result: "ผลตรวจ", openRoom: "ดูรายละเอียดห้อง", roomCount: "{count} ห้อง", recordCount: "{count} รายการ", fileLink: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์"
     },
     nav: {
       dashboard: "แดชบอร์ดสรุปผล",
@@ -115,6 +123,7 @@ const i18n = {
       engineerAccess: "Manage inspections, documents, statuses, and reports", viewerAccess: "View dashboard, floor map, records, and documents only"
     },
     role: { engineer: "Site Engineer", viewer: "Viewer / Guest", logout: "Log out", activeUser: "Signed in as" },
+    sync: { synced: "Synced", syncing: "Syncing...", offline: "Offline / Local Cache", refresh: "Refresh / Sync", fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Sync failed; the record is saved in the local cache.", syncFailed: "Could not connect to GAS. Showing the local cache.", uploadSuccess: "Saved to Google Drive and HistoryLog.", lastSync: "Last synced" },
     documents: {
       title: "Project Document Hub", subtitle: "Drill down by building, floor, room, and work category",
       upload: "Upload Document", type: "Document Type", typeGeneral: "General Document", typeRI: "Request for Inspection (RI)", typeInspection: "Inspection Report", typeDefect: "Defect Report",
@@ -127,12 +136,12 @@ const i18n = {
       expiredTitle: "Non-Inspection Reason Report", expiredDescription: "This RI document has expired. Enter the reason before archiving it.",
       reasonLabel: "Reason for missed inspection", reasonPlaceholder: "Explain why the inspection was missed...", archive: "Save reason and archive",
       archivedReason: "Archive reason", documentPreview: "Document Preview", uploaded: "Document uploaded", allLevels: "All",
-      buildingName: "Main Building", workCategories: ["Architecture", "MEP", "Structure"]
+      buildingName: "Main Building", workCategories: ["Architecture", "MEP", "Structure"], openFile: "Open file in Google Drive", folderPath: "Drive folder"
     },
     records: {
       title: "Inspection History by Work Category", subtitle: "Grouped by inspection task, then by building, floor, and room",
       allCategories: "All Categories", noRecords: "No inspection history for this category", building: "Building", floor: "Floor", room: "Room",
-      inspectionDate: "Inspection Date", inspector: "Inspector", result: "Result", openRoom: "View Room Details", roomCount: "{count} rooms", recordCount: "{count} records"
+      inspectionDate: "Inspection Date", inspector: "Inspector", result: "Result", openRoom: "View Room Details", roomCount: "{count} rooms", recordCount: "{count} records", fileLink: "Open file in Google Drive", folderPath: "Drive folder"
     },
     nav: {
       dashboard: "Executive Dashboard",
@@ -322,6 +331,158 @@ const getLocalDateString = (date = new Date()) => `${date.getFullYear()}-${Strin
 const dayDifference = (fromDate, toDate = getLocalDateString()) => Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000);
 const expireDueRiDocuments = (documents, today = getLocalDateString()) => documents.map(doc => doc.documentType === 'ri' && doc.status === 'pending' && doc.scheduledDate && dayDifference(doc.scheduledDate, today) >= 2 ? { ...doc, status: 'expired' } : doc);
 
+function normalizeHistoryLogRow(value = {}) {
+  const row = {};
+  HISTORY_LOG_FIELDS.forEach(field => {
+    const camel = field.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    row[field] = value[field] ?? value[camel] ?? '';
+  });
+  row.id = String(row.id || row.doc_no || crypto.randomUUID());
+  row.floor = String(row.floor ?? '');
+  row.room = String(row.room ?? '');
+  return row;
+}
+
+function extractHistoryRows(payload) {
+  const candidate = Array.isArray(payload) ? payload : payload?.data ?? payload?.records ?? payload?.rows ?? payload?.historyLog ?? payload?.history_log ?? [];
+  if (!Array.isArray(candidate)) return [];
+  if (candidate.length && Array.isArray(candidate[0])) {
+    const headers = candidate[0].map(String);
+    return candidate.slice(1).map(values => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])));
+  }
+  return candidate.filter(row => row && typeof row === 'object').map(normalizeHistoryLogRow);
+}
+
+function mergeHistoryRows(primaryRows, cachedRows) {
+  const rowsById = new Map();
+  [...cachedRows, ...primaryRows].forEach(value => {
+    const row = normalizeHistoryLogRow(value);
+    rowsById.set(row.id, { ...(rowsById.get(row.id) || {}), ...row });
+  });
+  return [...rowsById.values()];
+}
+
+function readLocalHistoryRows() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(HISTORY_LOG_CACHE_KEY) || '[]');
+    return Array.isArray(cached) ? cached.map(normalizeHistoryLogRow) : [];
+  } catch { return []; }
+}
+
+function historyRowToInspection(row, inspector = '') {
+  return {
+    id: row.id, roomNumber: String(row.room), task: row.trade, status: row.status,
+    remarks: row.reason, date: row.updated_at, inspector,
+    photo: row.doc_type === 'inspection' && row.file_url ? { name: row.file_name, type: '' } : null,
+    riDocument: row.doc_type === 'ri' && row.file_url ? { name: row.file_name, type: '' } : null,
+    file_url: row.file_url, folder_path: row.folder_path,
+  };
+}
+
+function toHistoryLogRow({ id, building, floor, room, trade, docNo, docType, appointmentDate = '', status = '', reason = '', fileName = '', fileUrl = '', folderPath = '', updatedAt = new Date().toISOString() }) {
+  return normalizeHistoryLogRow({ id, building, floor, room, trade, doc_no: docNo, doc_type: docType, appointment_date: appointmentDate, status, reason, file_name: fileName, file_url: fileUrl, folder_path: folderPath, updated_at: updatedAt });
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const separator = result.indexOf(',');
+      resolve(separator >= 0 ? result.slice(separator + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Could not read the selected file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildDriveFileName(building, floor, room, docNo, originalFileName) {
+  const cleanPart = value => String(value || '').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
+  return [building, floor, room, docNo, originalFileName].map(cleanPart).filter(Boolean).join('_');
+}
+
+async function readGasResponse(response) {
+  const body = await response.text();
+  if (!response.ok) throw new Error(`GAS request failed (${response.status})`);
+  if (!body) return {};
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed?.success === false || parsed?.ok === false || parsed?.error) throw new Error(parsed.message || parsed.error || 'GAS returned an error');
+    return parsed;
+  } catch (error) {
+    if (error instanceof SyntaxError) return { message: body };
+    throw error;
+  }
+}
+
+async function fetchHistoryLogFromGas() {
+  const response = await fetch(GAS_WEB_APP_URL, { method: 'GET', cache: 'no-store' });
+  const payload = await readGasResponse(response);
+  if (payload?.success === false || payload?.ok === false || payload?.error) throw new Error(payload.message || payload.error || 'GAS returned an error');
+  return extractHistoryRows(payload);
+}
+
+async function postHistoryLogToGas(payload) {
+  const response = await fetch(GAS_WEB_APP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+  });
+  const result = await readGasResponse(response);
+  const returned = result?.record ?? result?.data?.record ?? (result?.data && !Array.isArray(result.data) ? result.data : result);
+  return normalizeHistoryLogRow({ ...payload, ...(returned && typeof returned === 'object' ? returned : {}) });
+}
+
+function legacyInspectionsToHistory(records, rooms) {
+  return records.map(record => {
+    const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber));
+    return toHistoryLogRow({
+      id: record.id || crypto.randomUUID(), building: PROJECT_BUILDING_NAME, floor: room?.floor || '', room: record.roomNumber,
+      trade: record.task, docNo: record.id || `INS-${record.roomNumber}-${record.task}`, docType: 'inspection',
+      status: record.status, reason: record.remarks || '', fileName: record.photo?.name || '', fileUrl: '',
+      folderPath: '', updatedAt: record.date || new Date().toISOString(),
+    });
+  });
+}
+
+function historyRowsToInspections(rows, fallbackInspector = '') {
+  return rows.filter(row => ['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()))
+    .map(row => historyRowToInspection(row, fallbackInspector));
+}
+
+function historyRowToDocument(row) {
+  const rawType = String(row.doc_type || 'general').toLowerCase();
+  const documentType = rawType.includes('ri') || rawType.includes('request') ? 'ri' : rawType.includes('defect') ? 'defect' : rawType.includes('inspection') ? 'inspection' : 'general';
+  const building = row.building === PROJECT_BUILDING_NAME || row.building === 'Main Building' ? 'main' : row.building || 'main';
+  return {
+    id: row.id, name: row.file_name || row.doc_no || `Document ${row.id}`, reference: row.doc_no,
+    documentType, building, floor: String(row.floor || ''), roomNumber: String(row.room || ''),
+    category: ['Architecture', 'MEP', 'Structure'].includes(row.trade) ? row.trade : 'Architecture',
+    date: String(row.updated_at || '').slice(0, 10), scheduledDate: row.appointment_date || '',
+    status: String(row.status || 'pending').toLowerCase(), reasonReport: row.reason || '',
+    file_url: row.file_url || '', folder_path: row.folder_path || '', file_name: row.file_name || '',
+  };
+}
+
+function applyHistoryRowsToRooms(currentRooms, rows) {
+  const byRoom = new Map();
+  rows.filter(row => ['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()) && TASKS_13.includes(row.trade))
+    .forEach(row => {
+      const key = String(row.room);
+      if (!byRoom.has(key)) byRoom.set(key, []);
+      byRoom.get(key).push(row);
+    });
+  return currentRooms.map(room => {
+    const roomRows = byRoom.get(String(room.roomNumber));
+    if (!roomRows?.length) return room;
+    const tasks = { ...room.tasks };
+    roomRows.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at))).forEach(row => { tasks[row.trade] = row.status || 'pending'; });
+    const passed = Object.values(tasks).filter(value => value === 'passed').length;
+    const defects = Object.values(tasks).filter(value => value === 'defect').length;
+    return { ...room, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects, status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: roomRows[roomRows.length - 1].updated_at || room.lastUpdate };
+  });
+}
+
 const EVIDENCE_DB_NAME = 'trex-inspection-evidence';
 const EVIDENCE_STORE_NAME = 'records';
 function openEvidenceDb() {
@@ -341,11 +502,64 @@ async function storeInspectionEvidence(recordId, evidence) {
   const db = await openEvidenceDb();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
-    transaction.objectStore(EVIDENCE_STORE_NAME).put({ id: recordId, photo: evidence.photo || null, ri: evidence.ri || null });
+    const store = transaction.objectStore(EVIDENCE_STORE_NAME);
+    const request = store.get(recordId);
+    request.onsuccess = () => store.put({ ...(request.result || {}), id: recordId, photo: evidence.photo || request.result?.photo || null, ri: evidence.ri || request.result?.ri || null });
     transaction.oncomplete = () => { db.close(); resolve(); };
     transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not save evidence')); };
     transaction.onabort = () => { const error = transaction.error; db.close(); reject(error || new Error('Evidence save was cancelled')); };
   });
+}
+
+async function savePendingHistoryPayload(recordId, payload) {
+  const db = await openEvidenceDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(EVIDENCE_STORE_NAME);
+    const request = store.get(recordId);
+    request.onsuccess = () => store.put({ ...(request.result || {}), id: recordId, pendingGasPayload: payload });
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not queue offline record')); };
+  });
+}
+
+async function readPendingHistoryPayload(recordId) {
+  const db = await openEvidenceDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readonly');
+    const request = transaction.objectStore(EVIDENCE_STORE_NAME).get(recordId);
+    request.onsuccess = () => { const payload = request.result?.pendingGasPayload || null; db.close(); resolve(payload); };
+    request.onerror = () => { const error = request.error; db.close(); reject(error || new Error('Could not read queued record')); };
+  });
+}
+
+async function clearPendingHistoryPayload(recordId) {
+  const db = await openEvidenceDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(EVIDENCE_STORE_NAME);
+    const request = store.get(recordId);
+    request.onsuccess = () => {
+      if (!request.result) return;
+      const value = { ...request.result };
+      delete value.pendingGasPayload;
+      if (value.photo || value.ri) store.put(value); else store.delete(recordId);
+    };
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not clear queued record')); };
+  });
+}
+
+function readPendingHistoryIds() {
+  try {
+    const value = JSON.parse(localStorage.getItem(HISTORY_LOG_PENDING_KEY) || '[]');
+    return Array.isArray(value) ? value.map(String) : [];
+  } catch { return []; }
+}
+
+function writePendingHistoryIds(ids) {
+  try { localStorage.setItem(HISTORY_LOG_PENDING_KEY, JSON.stringify([...new Set(ids.map(String))])); }
+  catch (error) { console.warn('Could not update pending HistoryLog index:', error); }
 }
 
 async function loadInspectionEvidence(recordId, kind) {
@@ -417,10 +631,23 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('trex-rooms')) || generateRoomsData(); }
     catch { return generateRoomsData(); }
   });
+  const [historyRows, setHistoryRows] = useState(() => {
+    const cached = readLocalHistoryRows();
+    if (cached.length) return cached;
+    try {
+      const legacy = JSON.parse(localStorage.getItem('trex-inspections') || '[]');
+      return Array.isArray(legacy) ? legacyInspectionsToHistory(legacy, rooms) : [];
+    } catch { return []; }
+  });
   const [inspectionRecords, setInspectionRecords] = useState(() => {
+    const cached = readLocalHistoryRows();
+    if (cached.length) return historyRowsToInspections(cached);
     try { return JSON.parse(localStorage.getItem('trex-inspections')) || []; }
     catch { return []; }
   });
+  const [syncStatus, setSyncStatus] = useState('syncing');
+  const [syncError, setSyncError] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFloorFilter, setSelectedFloorFilter] = useState('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
@@ -433,6 +660,10 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('trex-rooms', JSON.stringify(rooms)); }, [rooms]);
   useEffect(() => { localStorage.setItem('trex-inspections', JSON.stringify(inspectionRecords)); }, [inspectionRecords]);
+  useEffect(() => {
+    try { localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(historyRows.map(normalizeHistoryLogRow))); }
+    catch (error) { console.warn('Could not update HistoryLog cache:', error); }
+  }, [historyRows]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -450,6 +681,132 @@ export default function App() {
     setActiveTab('dashboard');
     setMobileMenuOpen(false);
   };
+
+  const refreshHistory = useCallback(async (allowPendingWrites = session?.role === 'engineer') => {
+    setSyncStatus('syncing');
+    setSyncError(false);
+    try {
+      let remoteRows = await fetchHistoryLogFromGas();
+      let pendingIds = readPendingHistoryIds();
+      if (allowPendingWrites && session?.role === 'engineer' && pendingIds.length) {
+        const remaining = [];
+        for (const id of pendingIds) {
+          try {
+            const payload = await readPendingHistoryPayload(id);
+            if (!payload) { await clearPendingHistoryPayload(id); continue; }
+            const saved = await postHistoryLogToGas(payload);
+            remoteRows = mergeHistoryRows([saved], remoteRows);
+            await clearPendingHistoryPayload(id);
+          } catch (retryError) {
+            console.warn('Queued HistoryLog write is still pending:', retryError);
+            remaining.push(id);
+          }
+        }
+        pendingIds = remaining;
+        writePendingHistoryIds(remaining);
+      }
+      const merged = mergeHistoryRows(remoteRows, readLocalHistoryRows());
+      setHistoryRows(merged);
+      setInspectionRecords(historyRowsToInspections(merged, session?.name || ''));
+      setRooms(current => applyHistoryRowsToRooms(current, merged));
+      setSyncStatus(pendingIds.length ? 'offline' : 'synced');
+      setSyncError(pendingIds.length > 0);
+      setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
+      return merged;
+    } catch (error) {
+      console.warn('GAS HistoryLog sync failed; retaining local cache:', error);
+      setSyncStatus('offline');
+      setSyncError(true);
+      return null;
+    }
+  }, [session?.role, session?.name, lang]);
+
+  useEffect(() => {
+    if (session) refreshHistory(session.role === 'engineer');
+  }, [session, refreshHistory]);
+
+  const persistHistoryRecord = useCallback(async (inputRow, file = null) => {
+    if (session?.role !== 'engineer') return null;
+    if (file && file.size > MAX_UPLOAD_BYTES) {
+      showToast(i18n[lang].sync.fileTooLarge);
+      return null;
+    }
+    let row = normalizeHistoryLogRow(inputRow);
+    let payload = { ...row };
+    try {
+      if (file) {
+        const fileName = buildDriveFileName(row.building, row.floor, row.room, row.doc_no, file.name);
+        row = normalizeHistoryLogRow({ ...row, file_name: fileName });
+        payload = { ...row, fileData: await fileToBase64(file), fileName, mimeType: file.type || 'application/octet-stream' };
+      }
+      const cached = mergeHistoryRows([row], readLocalHistoryRows());
+      setHistoryRows(cached);
+      localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(cached));
+      setSyncStatus('syncing');
+      setSyncError(false);
+      const savedRow = await postHistoryLogToGas(payload);
+      let latestRows = [savedRow];
+      try {
+        const responseRows = await fetchHistoryLogFromGas();
+        if (responseRows.length) latestRows = responseRows;
+      } catch (refreshError) {
+        console.warn('POST succeeded but the follow-up GET could not refresh:', refreshError);
+      }
+      const updatedRows = mergeHistoryRows(latestRows, cached);
+      setHistoryRows(updatedRows);
+      if (String(row.doc_type).toLowerCase().startsWith('inspection')) {
+        setInspectionRecords(historyRowsToInspections(updatedRows, session.name));
+        setRooms(current => applyHistoryRowsToRooms(current, updatedRows));
+      }
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
+      return savedRow;
+    } catch (error) {
+      console.warn('GAS write failed; retaining the local HistoryLog row:', error);
+      try {
+        await savePendingHistoryPayload(row.id, payload);
+        writePendingHistoryIds([...readPendingHistoryIds(), row.id]);
+      } catch (queueError) {
+        console.warn('Could not queue the record for a later sync:', queueError);
+      }
+      setSyncStatus('offline');
+      setSyncError(true);
+      showToast(i18n[lang].sync.uploadFailed);
+      return row;
+    }
+  }, [session, lang]);
+
+  const submitInspection = useCallback(async (record, evidence) => {
+    if (session?.role !== 'engineer') return;
+    try { await storeInspectionEvidence(record.id, evidence); }
+    catch (error) {
+      console.error('Unable to persist inspection evidence locally:', error);
+      showToast(i18n[lang].sync.uploadFailed);
+    }
+    const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber));
+    const building = room?.building || PROJECT_BUILDING_NAME;
+    const base = {
+      building, floor: room?.floor || '', room: record.roomNumber, trade: record.task,
+      docNo: `INS-${record.id}`, docType: 'inspection', status: record.status,
+      reason: record.remarks || '', updatedAt: new Date().toISOString(),
+    };
+    const primaryRow = toHistoryLogRow({ ...base, id: record.id, fileName: evidence?.photo?.name || '', fileUrl: record.photo?.url || '' });
+    const localRecord = { ...record };
+    setInspectionRecords(current => [localRecord, ...current]);
+    setRooms(current => current.map(currentRoom => {
+      if (String(currentRoom.roomNumber) !== String(record.roomNumber)) return currentRoom;
+      const tasks = { ...currentRoom.tasks, [record.task]: record.status };
+      const passed = Object.values(tasks).filter(value => value === 'passed').length;
+      const defects = Object.values(tasks).filter(value => value === 'defect').length;
+      return { ...currentRoom, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects, status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: record.date, lastInspector: record.inspector };
+    }));
+    await persistHistoryRecord(primaryRow, evidence?.photo || null);
+    if (evidence?.ri) {
+      const riRow = toHistoryLogRow({ ...base, id: `${record.id}-ri`, docNo: `RI-${record.id}`, docType: 'ri', fileName: evidence.ri.name });
+      await persistHistoryRecord(riRow, evidence.ri);
+    }
+    showToast(lang === 'th' ? `บันทึกผลตรวจห้อง ${record.roomNumber} สำเร็จ` : `Saved inspection for Room ${record.roomNumber}`);
+  }, [session, rooms, persistHistoryRecord, lang]);
 
   // KPI Computations
   const stats = useMemo(() => {
@@ -585,6 +942,11 @@ export default function App() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="max-w-36 text-right sm:max-w-52"><p className="hidden truncate text-[10px] text-slate-400 md:block">{session.name}</p><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300">{session.role === 'engineer' ? t.role.engineer : t.role.viewer}</span></div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-1.5" title={syncError ? t.sync.syncFailed : syncStatus === 'synced' && lastSyncedAt ? `${t.sync.lastSync}: ${lastSyncedAt}` : undefined}>
+              <span className={`h-2 w-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-400' : syncStatus === 'syncing' ? 'animate-pulse bg-amber-300' : 'bg-red-400'}`} />
+              <span className="hidden text-[9px] font-medium text-slate-300 lg:inline">{syncStatus === 'synced' ? t.sync.synced : syncStatus === 'syncing' ? t.sync.syncing : t.sync.offline}</span>
+            </div>
+            <button type="button" disabled={syncStatus === 'syncing'} onClick={() => refreshHistory(isEngineer)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50 sm:px-3" title={t.sync.refresh} aria-label={t.sync.refresh}><RefreshCw className={`h-4 w-4 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} /><span className="hidden xl:inline">{t.sync.refresh}</span></button>
             {/* Language Switcher Button */}
             <button
               onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
@@ -609,6 +971,7 @@ export default function App() {
 
         {/* View Content Renderer */}
         <main className="flex-1 overflow-y-auto bg-[#0B132B] p-3 sm:p-6">
+          {syncError && <div role="alert" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">{t.sync.syncFailed}</div>}
           {activeTab === 'dashboard' && (
             <DashboardView 
               t={t} 
@@ -634,33 +997,15 @@ export default function App() {
           )}
 
           {activeTab === 'newInspection' && (
-            <RoomInspectionFormView t={t} lang={lang} showToast={showToast} rooms={rooms} onSubmitInspection={async (record, evidence) => {
-              try {
-                await storeInspectionEvidence(record.id, evidence);
-              } catch (error) {
-                console.error('Unable to persist inspection evidence:', error);
-                showToast(lang === 'th' ? 'บันทึกข้อมูลตรวจแล้ว แต่จัดเก็บไฟล์หลักฐานไม่สำเร็จ' : 'Inspection was saved, but the evidence file could not be stored.');
-              }
-              const nextRecords = [record, ...inspectionRecords];
-              setInspectionRecords(nextRecords);
-              setRooms(current => current.map(room => {
-                if (room.roomNumber !== record.roomNumber) return room;
-                const tasks = { ...room.tasks, [record.task]: record.status };
-                const passed = Object.values(tasks).filter(value => value === 'passed').length;
-                const defects = Object.values(tasks).filter(value => value === 'defect').length;
-                return { ...room, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects,
-                  status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: record.date, lastInspector: record.inspector };
-              }));
-              showToast(`บันทึกผลตรวจห้อง ${record.roomNumber} - ${record.task} สำเร็จ`);
-            }} />
+            <RoomInspectionFormView t={t} lang={lang} showToast={showToast} rooms={rooms} onSubmitInspection={submitInspection} />
           )}
 
           {activeTab === 'inspectionRecords' && (
-            <InspectionRecordsView t={t} rooms={rooms} records={inspectionRecords} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
+            <InspectionRecordsView t={t} rooms={rooms} records={inspectionRecords} historyRows={historyRows} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
           )}
 
           {activeTab === 'documentCenter' && (
-            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} canEdit={isEngineer} userName={session.name} />
+            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} canEdit={isEngineer} userName={session.name} historyRows={historyRows} onRecordSaved={persistHistoryRecord} />
           )}
 
           {activeTab === 'aiAssistant' && (
@@ -964,6 +1309,11 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
+    if (file && file.size > MAX_UPLOAD_BYTES) {
+      showToast(t.sync.fileTooLarge);
+      e.target.value = '';
+      return;
+    }
     if (file) {
       if (photoPreview) URL.revokeObjectURL(photoPreview);
       setPhotoFile(file);
@@ -982,6 +1332,11 @@ function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) 
   const handleRiUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showToast(t.sync.fileTooLarge);
+      event.target.value = '';
+      return;
+    }
     setRiFile(file);
     setRiVerification('checking');
     window.setTimeout(() => {
@@ -1175,7 +1530,7 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
             {grouped.size === 0 ? <p className="rounded-lg bg-slate-900/60 p-4 text-xs text-slate-400">{labels.noRecords}</p> : [...grouped.entries()].map(([building, floors]) => <section key={building} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"><h3 className="mb-3 text-xs font-bold text-emerald-300">{labels.building}: {building}</h3>
               <div className="space-y-3">{[...floors.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([floor, floorRooms]) => <div key={floor}><h4 className="mb-2 text-[11px] font-semibold text-slate-300">{labels.floor} {floor}</h4><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{[...floorRooms.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([roomNumber, roomRecords]) => {
                 const room = rooms.find(item => String(item.roomNumber) === roomNumber);
-                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p></div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
+                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p>{record.file_url && <a href={record.file_url} target="_blank" rel="noreferrer" className="mt-2 inline-block font-semibold text-sky-300 underline">{labels.fileLink}</a>}{record.folder_path && <p className="mt-1 break-all text-slate-500">{labels.folderPath}: {record.folder_path}</p>}</div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
               })}</div></div>)}</div>
             </section>)}
           </div>
@@ -1188,7 +1543,7 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
 // ==========================================
 // MODULE 5: DOCUMENT CENTER
 // ==========================================
-function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName }) {
+function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, historyRows = [], onRecordSaved }) {
   const labels = t.documents;
   const sampleDocs = () => [
     { id: 'seed-1', name: 'Inspection_Report_Floor_4_Q3.pdf', reference: 'INS-2026-004', documentType: 'inspection', building: 'main', floor: '4', roomNumber: '401', category: 'Architecture', date: getLocalDateString(), status: 'completed', size: '3.4 MB' },
@@ -1210,17 +1565,39 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName }) {
   const lastCheckedDate = useRef(today);
   const [form, setForm] = useState({ documentType: 'general', building: 'main', floor: '1', roomNumber: '', category: 'Architecture', reference: '', scheduledDate: '', file: null });
 
+  const docToHistoryRow = (doc, overrides = {}) => toHistoryLogRow({
+    id: doc.id, building: doc.building === 'main' ? PROJECT_BUILDING_NAME : doc.building,
+    floor: doc.floor, room: doc.roomNumber, trade: doc.category,
+    docNo: doc.reference, docType: doc.documentType, appointmentDate: doc.scheduledDate || '',
+    status: overrides.status || doc.status, reason: overrides.reason ?? doc.reasonReport ?? '',
+    fileName: doc.file_name || doc.name, fileUrl: doc.file_url || '', folderPath: doc.folder_path || '',
+    updatedAt: new Date().toISOString(),
+  });
+
+  useEffect(() => {
+    const remoteDocs = historyRows.filter(row => !['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()) || row.file_url).map(historyRowToDocument);
+    if (!remoteDocs.length) return;
+    setDocs(current => {
+      const byId = new Map(current.map(doc => [String(doc.id), doc]));
+      remoteDocs.forEach(doc => byId.set(String(doc.id), { ...(byId.get(String(doc.id)) || {}), ...doc, file: byId.get(String(doc.id))?.file || null }));
+      return [...byId.values()];
+    });
+  }, [historyRows]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       const nextDate = getLocalDateString();
       if (lastCheckedDate.current !== nextDate) {
         lastCheckedDate.current = nextDate;
         setToday(nextDate);
-        setDocs(current => expireDueRiDocuments(current, nextDate));
+        const nextDocs = expireDueRiDocuments(docs, nextDate);
+        const newlyExpired = nextDocs.filter(doc => doc.status === 'expired' && docs.some(previous => previous.id === doc.id && previous.status !== 'expired'));
+        setDocs(nextDocs);
+        if (canEdit) newlyExpired.forEach(doc => { void onRecordSaved(docToHistoryRow(doc, { status: 'expired' })); });
       }
     }, 60000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [docs, today, canEdit, onRecordSaved]);
   useEffect(() => {
     try { localStorage.setItem('trex-documents', JSON.stringify(docs.map(doc => { const metadata = { ...doc }; delete metadata.file; return metadata; }))); }
     catch (error) { console.warn('Could not save document metadata:', error); }
@@ -1261,22 +1638,32 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName }) {
   const submitUpload = event => {
     event.preventDefault();
     if (!form.file || !form.floor || !form.roomNumber || !form.category || (form.documentType === 'ri' && (!form.scheduledDate || form.scheduledDate < today))) { setFormError(labels.required); return; }
+    if (form.file.size > MAX_UPLOAD_BYTES) { setFormError(t.sync.fileTooLarge); return; }
     const documentRecord = { id: crypto.randomUUID(), name: form.file.name, reference: form.reference.trim() || `DOC-${today.replaceAll('-', '')}`, documentType: form.documentType, building: form.building, floor: String(form.floor), roomNumber: String(form.roomNumber), category: form.category, date: today, scheduledDate: form.documentType === 'ri' ? form.scheduledDate : null, status: 'pending', size: `${(form.file.size / 1024 / 1024).toFixed(2)} MB`, file: form.file };
     setDocs(current => [documentRecord, ...current]);
     setPath({ building: documentRecord.building, floor: documentRecord.floor, room: documentRecord.roomNumber, category: documentRecord.category });
     setUploadOpen(false);
-    showToast(`${labels.uploaded}: ${form.file.name}`);
+    void onRecordSaved(docToHistoryRow(documentRecord), form.file).then(saved => {
+      if (saved) setDocs(current => current.map(doc => doc.id === documentRecord.id ? { ...doc, file_url: saved.file_url || doc.file_url, folder_path: saved.folder_path || doc.folder_path, file_name: saved.file_name || doc.file_name } : doc));
+    });
   };
   const handleDownload = doc => {
     if (doc.file) { const url = URL.createObjectURL(doc.file); const anchor = document.createElement('a'); anchor.href = url; anchor.download = doc.name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    else if (doc.file_url) window.open(doc.file_url, '_blank', 'noopener,noreferrer');
     else downloadFile(`${doc.name}\n${labels.referenceNumber}: ${doc.reference}\n${labels.category}: ${displayCategory(doc.category)}\n${labels.date}: ${doc.date}`, `${doc.name}.txt`);
   };
   const handlePreview = doc => setSelectedDoc({ ...doc, previewUrl: doc.file ? URL.createObjectURL(doc.file) : null });
-  const markComplete = doc => setDocs(current => current.map(item => item.id === doc.id ? { ...item, status: 'completed', completedAt: today } : item));
+  const markComplete = doc => {
+    const updated = { ...doc, status: 'completed', completedAt: today };
+    setDocs(current => current.map(item => item.id === doc.id ? updated : item));
+    if (canEdit) void onRecordSaved(docToHistoryRow(updated, { status: 'completed' }));
+  };
   const submitReason = event => {
     event.preventDefault();
     if (!reasonText.trim()) return;
-    setDocs(current => current.map(item => item.id === reasonDoc.id ? { ...item, status: 'archived', reasonReport: reasonText.trim(), archivedAt: today, archivedBy: userName } : item));
+    const updated = { ...reasonDoc, status: 'archived', reasonReport: reasonText.trim(), archivedAt: today, archivedBy: userName };
+    setDocs(current => current.map(item => item.id === reasonDoc.id ? updated : item));
+    if (canEdit) void onRecordSaved(docToHistoryRow(updated, { status: 'archived', reason: reasonText.trim() }));
     setReasonDoc(null); setReasonText('');
   };
 
@@ -1304,7 +1691,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName }) {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 p-4"><h3 className="text-sm font-bold text-slate-100">{displayBuilding(path.building)} · {labels.floor} {path.floor} · {labels.room} {path.room} · {displayCategory(path.category)}</h3><span className="text-[10px] text-slate-400">{labels.referenceNumber} / {labels.date}</span></div>
         {!docsAtPath.length ? <p className="p-6 text-center text-xs text-slate-400">{labels.empty}</p> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
           const status = lifecycle(doc);
-          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}</div></div>
+          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.file_url && <a href={doc.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-sky-300 underline">{labels.openFile}</a>}{doc.folder_path && <p className="mt-1 break-all text-[10px] text-slate-500">{labels.folderPath}: {doc.folder_path}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}</div></div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status === 'expired' ? 'bg-red-500/15 text-red-300' : status === 'completed' ? 'bg-emerald-500/15 text-emerald-300' : status === 'archived' ? 'bg-slate-600/30 text-slate-300' : 'bg-amber-500/15 text-amber-300'}`}>{displayStatus(status)}</span><button type="button" onClick={() => handlePreview(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={labels.documentPreview} title={labels.documentPreview}><Eye className="h-4 w-4"/></button><button type="button" onClick={() => handleDownload(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={t.common.export} title={t.common.export}><Download className="h-4 w-4"/></button>{canEdit && status === 'pending' && doc.documentType === 'ri' && <button type="button" onClick={() => markComplete(doc)} className="rounded-md bg-emerald-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-emerald-600">{labels.markComplete}</button>}{canEdit && status === 'expired' && <button type="button" onClick={() => { setReasonDoc(doc); setReasonText(doc.reasonReport || ''); }} className="rounded-md bg-red-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-red-600">{labels.archive}</button>}</div>
           </article>;
         })}</div>}
