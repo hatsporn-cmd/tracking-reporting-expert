@@ -8,7 +8,7 @@ import {
   Camera, FileDown as FilePdf
 } from 'lucide-react';
 
-const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxtowV3aBpyIaZb7j6MbVtD-d-7TC0gKCrfz6Le1GSAkP9WRQOEH-0x1UrK_1Ii2Zu1VQ/exec';
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxvXq7Asy_hQPyUVRIT9jCK0vppYQCDhsDxC0CdblmyBqwEXMopX7pQYz8-laC8C031_A/exec';
 const HISTORY_LOG_CACHE_KEY = 'trex_history_log_cache';
 const HISTORY_LOG_PENDING_KEY = 'trex_history_log_pending';
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -43,7 +43,7 @@ const i18n = {
       engineerAccess: "จัดการการตรวจ เอกสาร สถานะ และรายงานได้", viewerAccess: "ดูแดชบอร์ด ผังชั้น ประวัติ และเอกสารได้เท่านั้น"
     },
     role: { engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", logout: "ออกจากระบบ", activeUser: "ผู้ใช้งานปัจจุบัน" },
-    sync: { synced: "ซิงก์แล้ว", syncing: "กำลังซิงก์...", offline: "ออฟไลน์ / ใช้ข้อมูลในเครื่อง", refresh: "รีเฟรช / ซิงก์", fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "ซิงก์ไม่สำเร็จ บันทึกข้อมูลไว้ในเครื่องแล้ว", syncFailed: "เชื่อมต่อ GAS ไม่สำเร็จ กำลังใช้ข้อมูลในเครื่อง", uploadSuccess: "บันทึกข้อมูลลง Google Drive และ HistoryLog แล้ว", lastSync: "ซิงก์ล่าสุด", uploading: "กำลังอัปโหลดและบันทึก...", uploadSuccessLink: "อัปโหลดสำเร็จ เปิดไฟล์ใน Google Drive" },
+    sync: { synced: "ซิงก์แล้ว", syncing: "กำลังซิงก์...", offline: "ออฟไลน์ / ใช้ข้อมูลในเครื่อง", refresh: "รีเฟรช / ซิงก์", fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "ซิงก์ไม่สำเร็จ บันทึกข้อมูลไว้ในเครื่องแล้ว", syncFailed: "เชื่อมต่อ GAS ไม่สำเร็จ กำลังใช้ข้อมูลในเครื่อง", connectionGuide: "ตรวจสอบว่า Deploy /api/history และเผยแพร่ GAS Web App ให้เข้าถึงได้โดยไม่ต้องเข้าสู่ระบบ (Anyone); หากเรียกจากเบราว์เซอร์โดยตรง GET ต้องรองรับ JSONP (prefix)", uploadSuccess: "บันทึกข้อมูลลง Google Drive และ HistoryLog แล้ว", lastSync: "ซิงก์ล่าสุด", uploading: "กำลังอัปโหลดและบันทึก...", uploadSuccessLink: "อัปโหลดสำเร็จ เปิดไฟล์ใน Google Drive" },
     documents: {
       title: "ศูนย์เอกสารโครงการ", subtitle: "เลือกตามอาคาร ชั้น ห้อง และหมวดงานเพื่อดูเอกสาร",
       upload: "อัปโหลดเอกสาร", type: "ประเภทเอกสาร", typeGeneral: "เอกสารทั่วไป", typeRI: "Request for Inspection (RI)", typeInspection: "รายงานการตรวจ", typeDefect: "รายงานข้อบกพร่อง",
@@ -139,7 +139,7 @@ const i18n = {
       engineerAccess: "Manage inspections, documents, statuses, and reports", viewerAccess: "View dashboard, floor map, records, and documents only"
     },
     role: { engineer: "Site Engineer", viewer: "Viewer / Guest", logout: "Log out", activeUser: "Signed in as" },
-    sync: { synced: "Synced", syncing: "Syncing...", offline: "Offline / Local Cache", refresh: "Refresh / Sync", fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Sync failed; the record is saved in the local cache.", syncFailed: "Could not connect to GAS. Showing the local cache.", uploadSuccess: "Saved to Google Drive and HistoryLog.", lastSync: "Last synced", uploading: "Uploading and saving...", uploadSuccessLink: "Upload complete. Open in Google Drive" },
+    sync: { synced: "Synced", syncing: "Syncing...", offline: "Offline / Local Cache", refresh: "Refresh / Sync", fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Sync failed; the record is saved in the local cache.", syncFailed: "Could not connect to GAS. Showing the local cache.", connectionGuide: "Check that /api/history is deployed and the GAS Web App is accessible without sign-in (Anyone). If the browser calls GAS directly, GET must support JSONP (the prefix parameter).", uploadSuccess: "Saved to Google Drive and HistoryLog.", lastSync: "Last synced", uploading: "Uploading and saving...", uploadSuccessLink: "Upload complete. Open in Google Drive" },
     documents: {
       title: "Project Document Hub", subtitle: "Drill down by building, floor, room, and work category",
       upload: "Upload Document", type: "Document Type", typeGeneral: "General Document", typeRI: "Request for Inspection (RI)", typeInspection: "Inspection Report", typeDefect: "Defect Report",
@@ -485,11 +485,74 @@ async function readGasResponse(response) {
   }
 }
 
+function isHistoryLogResponse(payload) {
+  if (Array.isArray(payload)) return true;
+  if (!payload || typeof payload !== 'object') return false;
+  return ['data', 'records', 'rows', 'historyLog', 'history_log', 'values'].some(key => Object.hasOwn(payload, key) && (Array.isArray(payload[key]) || isHistoryLogResponse(payload[key])));
+}
+
+function isHistoryRowConfirmed(remoteRow, payload) {
+  if (!remoteRow || String(remoteRow.id) !== String(payload.id)) return false;
+  const remoteTime = Date.parse(remoteRow.updated_at || '') || 0;
+  const submittedTime = Date.parse(payload.updated_at || '') || 0;
+  const fileWasSubmitted = Boolean(payload.fileData || payload.pendingFile);
+  return remoteTime >= submittedTime && (!fileWasSubmitted || Boolean(remoteRow.file_url));
+}
+
+function fetchHistoryLogJsonp(timeoutMs = 12000) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `__trexHistoryCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const endpoint = new URL(GAS_WEB_APP_URL);
+    endpoint.searchParams.set('prefix', `window.${callbackName}`);
+    const script = document.createElement('script');
+    let timer;
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      delete window[callbackName];
+      script.remove();
+    };
+    window[callbackName] = payload => {
+      cleanup();
+      if (payload?.success === false || payload?.error || !isHistoryLogResponse(payload)) {
+        reject(new Error(payload?.message || 'GAS GET endpoint did not return JSONP HistoryLog rows.'));
+        return;
+      }
+      resolve(extractHistoryRows(payload));
+    };
+    script.onerror = () => { cleanup(); reject(new Error('GAS JSONP request failed. Check Web App access and JSONP support.')); };
+    timer = window.setTimeout(() => { cleanup(); reject(new Error('GAS JSONP request timed out.')); }, timeoutMs);
+    script.async = true;
+    script.src = endpoint.toString();
+    document.head.appendChild(script);
+  });
+}
+
 async function fetchHistoryLogFromGas() {
-  const response = await fetch(GAS_WEB_APP_URL, { method: 'GET', cache: 'no-store' });
-  const payload = await readGasResponse(response);
-  if (payload?.success === false || payload?.ok === false || payload?.error) throw new Error(payload.message || payload.error || 'GAS returned an error');
-  return extractHistoryRows(payload);
+  let proxyError = null;
+  try {
+    const response = await fetch('/api/history', { method: 'GET', cache: 'no-store' });
+    const payload = await readGasResponse(response);
+    if (payload?.success === false || payload?.ok === false || payload?.error) throw new Error(payload.message || payload.error || 'GAS returned an error');
+    if (!isHistoryLogResponse(payload)) throw new Error('GAS GET response did not contain HistoryLog rows.');
+    return extractHistoryRows(payload);
+  } catch (error) {
+    proxyError = error;
+    console.warn('Same-origin GAS history proxy failed; trying direct GET/JSONP fallback:', error);
+  }
+  try {
+    const response = await fetch(GAS_WEB_APP_URL, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+    const payload = await readGasResponse(response);
+    if (payload?.success === false || payload?.ok === false || payload?.error) throw new Error(payload.message || payload.error || 'GAS returned an error');
+    if (!isHistoryLogResponse(payload)) throw new Error('GAS GET response did not contain HistoryLog rows.');
+    return extractHistoryRows(payload);
+  } catch (fetchError) {
+    console.warn('Direct GAS GET failed; trying JSONP for the cross-origin response:', fetchError);
+    try { return await fetchHistoryLogJsonp(); }
+    catch (jsonpError) {
+      const detail = jsonpError?.message || fetchError?.message || 'Unknown connection error';
+      throw new Error(`Same-origin relay failed (${proxyError?.message || 'unavailable'}); direct GET failed (${fetchError?.message || 'CORS/network'}); JSONP fallback failed (${detail}).`);
+    }
+  }
 }
 
 async function postHistoryLogToGas(payload) {
@@ -500,11 +563,31 @@ async function postHistoryLogToGas(payload) {
     body.fileName = payload.fileName || bodyRow.file_name;
     body.mimeType = payload.mimeType || 'application/octet-stream';
   }
-  const response = await fetch(GAS_WEB_APP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body),
-  });
+  const serializedBody = JSON.stringify(body);
+  const serializedBytes = new TextEncoder().encode(serializedBody).byteLength;
+  let response;
+  if (serializedBytes <= 3_500_000) {
+    try {
+      response = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: serializedBody,
+      });
+      if (response.status === 404) response = null;
+    } catch (proxyError) {
+      console.warn('Same-origin POST relay is unavailable; using the GAS opaque POST fallback:', proxyError);
+      response = null;
+    }
+  }
+  if (!response) {
+    // Large base64 uploads bypass the serverless body limit. GET through /api/history confirms the write.
+    response = await fetch(GAS_WEB_APP_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: serializedBody,
+    });
+  }
+  if (response.type === 'opaque') return { ...bodyRow, _needsReadBack: true };
   const result = await readGasResponse(response);
   const dataRecord = Array.isArray(result?.data) ? result.data.find(item => item && typeof item === 'object' && (String(item.id || item.doc_no) === String(bodyRow.id))) : result?.data;
   const arrayRecord = Array.isArray(result) ? result.find(item => item && typeof item === 'object' && (String(item.id || item.doc_no) === String(bodyRow.id))) : null;
@@ -759,6 +842,7 @@ export default function App() {
   });
   const [syncStatus, setSyncStatus] = useState('syncing');
   const [syncError, setSyncError] = useState(false);
+  const [syncErrorReason, setSyncErrorReason] = useState('');
   const [lastSyncedAt, setLastSyncedAt] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFloorFilter, setSelectedFloorFilter] = useState('all');
@@ -797,11 +881,14 @@ export default function App() {
   const refreshHistory = useCallback(async (allowPendingWrites = session?.role === 'engineer') => {
     setSyncStatus('syncing');
     setSyncError(false);
+    setSyncErrorReason('');
     let remoteRows = [];
     let readFailed = false;
+    let lastSyncError = '';
     try { remoteRows = await fetchHistoryLogFromGas(); }
     catch (error) {
       readFailed = true;
+      lastSyncError = error?.message || String(error);
       console.error('Could not read HistoryLog from GAS; continuing with cache and queued writes:', error);
     }
 
@@ -827,8 +914,16 @@ export default function App() {
           }
           const saved = await postHistoryLogToGas(retryPayload);
           remoteRows = mergeHistoryRows([saved], remoteRows);
+          if (saved._needsReadBack) {
+            const confirmRows = await fetchHistoryLogFromGas();
+            const confirmed = confirmRows.find(item => String(item.id) === String(id));
+            if (!confirmed || !isHistoryRowConfirmed(confirmed, retryPayload)) throw new Error('GAS accepted an unreadable POST but GET could not confirm the row and file link.');
+            remoteRows = mergeHistoryRows([confirmed], remoteRows);
+            readFailed = false;
+          }
           await clearPendingHistoryPayload(id);
         } catch (retryError) {
+          lastSyncError = retryError?.message || String(retryError);
           console.error(`Queued HistoryLog row ${id} could not be synced:`, retryError);
           remaining.push(id);
         }
@@ -837,7 +932,7 @@ export default function App() {
       writePendingHistoryIds(remaining);
       if (readFailed && remoteRows.length) {
         try { remoteRows = mergeHistoryRows(await fetchHistoryLogFromGas(), remoteRows); readFailed = false; }
-        catch (error) { console.error('GAS accepted queued writes but the confirming read failed:', error); }
+        catch (error) { lastSyncError = error?.message || String(error); console.error('GAS accepted queued writes but the confirming read failed:', error); }
       }
     }
 
@@ -848,6 +943,7 @@ export default function App() {
     const failed = pendingIds.length > 0 || readFailed;
     setSyncStatus(failed ? 'offline' : 'synced');
     setSyncError(failed);
+    setSyncErrorReason(failed ? (lastSyncError || '') : '');
     if (!readFailed) setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
     return merged;
   }, [session, lang]);
@@ -878,18 +974,28 @@ export default function App() {
       }
       setSyncStatus('syncing');
       setSyncError(false);
+      setSyncErrorReason('');
       const savedRow = await postHistoryLogToGas(payload);
+      let latestRows = [savedRow];
+      let readBackFailed = false;
+      if (savedRow._needsReadBack) {
+        const responseRows = await fetchHistoryLogFromGas();
+        const confirmed = responseRows.find(item => String(item.id) === String(row.id));
+        if (!confirmed || !isHistoryRowConfirmed(confirmed, payload)) throw new Error('GAS POST was sent but the follow-up GET did not confirm that the row and file were saved.');
+        latestRows = mergeHistoryRows([confirmed], responseRows);
+      }
       try { await clearPendingHistoryPayload(row.id); }
       catch (queueError) { console.error('Backend accepted the HistoryLog row, but its local queue entry could not be cleared yet:', queueError); }
       writePendingHistoryIds(readPendingHistoryIds().filter(id => String(id) !== String(row.id)));
-      let latestRows = [savedRow];
-      let readBackFailed = false;
-      try {
-        const responseRows = await fetchHistoryLogFromGas();
-        if (responseRows.length) latestRows = mergeHistoryRows([savedRow], responseRows);
-      } catch (refreshError) {
-        readBackFailed = true;
-        console.error('POST succeeded, but the follow-up HistoryLog refresh failed; retaining the returned record:', refreshError);
+      if (!savedRow._needsReadBack) {
+        try {
+          const responseRows = await fetchHistoryLogFromGas();
+          if (responseRows.length) latestRows = mergeHistoryRows([savedRow], responseRows);
+        } catch (refreshError) {
+          readBackFailed = true;
+          setSyncErrorReason(refreshError?.message || String(refreshError));
+          console.error('POST succeeded, but the follow-up HistoryLog refresh failed; retaining the returned record:', refreshError);
+        }
       }
       const updatedRows = persistHistoryRowsCache(mergeHistoryRows(latestRows, cached));
       setHistoryRows(updatedRows);
@@ -899,6 +1005,7 @@ export default function App() {
       const needsAttention = hasPendingWrites || readBackFailed;
       setSyncStatus(needsAttention ? 'offline' : 'synced');
       setSyncError(needsAttention);
+      if (!needsAttention) setSyncErrorReason('');
       if (!needsAttention) setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
       return { ...savedRow, _savedToBackend: true };
     } catch (error) {
@@ -911,6 +1018,7 @@ export default function App() {
       }
       setSyncStatus('offline');
       setSyncError(true);
+      setSyncErrorReason(error?.message || String(error));
       return { ...row, _savedToBackend: false };
     }
   }, [session, lang]);
@@ -1114,7 +1222,7 @@ export default function App() {
 
         {/* View Content Renderer */}
         <main className="flex-1 overflow-y-auto bg-[#0B132B] p-3 sm:p-6">
-          {syncError && <div role="alert" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">{t.sync.syncFailed}</div>}
+          {syncError && <div role="alert" className="mb-4 space-y-1 rounded-lg border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"><p className="font-semibold">{t.sync.syncFailed}</p>{syncErrorReason && <p className="break-words text-[11px] text-amber-100">{syncErrorReason}</p>}<p className="text-[11px] text-amber-100/80">{t.sync.connectionGuide}</p></div>}
           {activeTab === 'dashboard' && (
             <DashboardView 
               t={t} 
