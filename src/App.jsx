@@ -8,7 +8,7 @@ import {
   Camera, FileDown as FilePdf
 } from 'lucide-react';
 
-const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzZx_5vITCaQpsfXqMjNOimB6CUEIg9FJVGHkIRBLEMHD2Y4wSObghI9n5dKESQvnWhQA/exec';
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxtowV3aBpyIaZb7j6MbVtD-d-7TC0gKCrfz6Le1GSAkP9WRQOEH-0x1UrK_1Ii2Zu1VQ/exec';
 const HISTORY_LOG_CACHE_KEY = 'trex_history_log_cache';
 const HISTORY_LOG_PENDING_KEY = 'trex_history_log_pending';
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
