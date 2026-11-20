@@ -61,7 +61,8 @@ const i18n = {
     records: {
       title: "ประวัติการตรวจแยกตามหมวดงาน", subtitle: "จัดกลุ่มตามงานตรวจ แล้วแยกตามอาคาร ชั้น และห้อง",
       allCategories: "ทุกหมวดงาน", noRecords: "ยังไม่มีประวัติการตรวจในหมวดงานนี้", building: "อาคาร", floor: "ชั้น", room: "ห้อง",
-      inspectionDate: "วันที่ตรวจ", inspector: "ผู้ตรวจ", result: "ผลตรวจ", openRoom: "ดูรายละเอียดห้อง", roomCount: "{count} ห้อง", recordCount: "{count} รายการ", fileLink: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์"
+      inspectionDate: "วันที่ตรวจ", inspector: "ผู้ตรวจ", result: "ผลตรวจ", openRoom: "ดูรายละเอียดห้อง", roomCount: "{count} ห้อง", recordCount: "{count} รายการ", fileLink: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์",
+      viewPhotos: "ดูรูปภาพ", viewRiDocument: "ดูเอกสาร RI", evidencePreview: "ตัวอย่างหลักฐาน", evidenceUnavailable: "ไม่พบไฟล์หลักฐานในอุปกรณ์นี้หรือ Google Drive", evidenceError: "เปิดไฟล์หลักฐานไม่สำเร็จ กรุณาลองใหม่"
     },
     nav: {
       dashboard: "แดชบอร์ดสรุปผล",
@@ -156,7 +157,8 @@ const i18n = {
     records: {
       title: "Inspection History by Work Category", subtitle: "Grouped by inspection task, then by building, floor, and room",
       allCategories: "All Categories", noRecords: "No inspection history for this category", building: "Building", floor: "Floor", room: "Room",
-      inspectionDate: "Inspection Date", inspector: "Inspector", result: "Result", openRoom: "View Room Details", roomCount: "{count} rooms", recordCount: "{count} records", fileLink: "Open file in Google Drive", folderPath: "Drive folder"
+      inspectionDate: "Inspection Date", inspector: "Inspector", result: "Result", openRoom: "View Room Details", roomCount: "{count} rooms", recordCount: "{count} records", fileLink: "Open file in Google Drive", folderPath: "Drive folder",
+      viewPhotos: "View Photos", viewRiDocument: "View RI Document", evidencePreview: "Evidence Preview", evidenceUnavailable: "Evidence is not available on this device or in Google Drive", evidenceError: "Could not open the evidence file. Please try again."
     },
     nav: {
       dashboard: "Executive Dashboard",
@@ -354,13 +356,17 @@ function normalizeHistoryLogRow(value = {}) {
   });
   row.id = String(row.id || row.doc_no || crypto.randomUUID());
   row.building = canonicalBuilding(row.building, row.floor);
+  row.doc_type = String(row.doc_type || '').trim().toLowerCase();
   row.floor = String(row.floor ?? '');
   row.room = String(row.room ?? '');
   return row;
 }
 
 function extractHistoryRows(payload) {
-  const candidate = Array.isArray(payload) ? payload : payload?.data ?? payload?.records ?? payload?.rows ?? payload?.historyLog ?? payload?.history_log ?? [];
+  let candidate = payload;
+  for (let depth = 0; depth < 4 && !Array.isArray(candidate); depth += 1) {
+    candidate = candidate?.data ?? candidate?.records ?? candidate?.rows ?? candidate?.historyLog ?? candidate?.history_log ?? candidate?.values ?? [];
+  }
   if (!Array.isArray(candidate)) return [];
   if (candidate.length && Array.isArray(candidate[0])) {
     const headers = candidate[0].map(String);
@@ -373,9 +379,54 @@ function mergeHistoryRows(primaryRows, cachedRows) {
   const rowsById = new Map();
   [...cachedRows, ...primaryRows].forEach(value => {
     const row = normalizeHistoryLogRow(value);
-    rowsById.set(row.id, { ...(rowsById.get(row.id) || {}), ...row });
+    const previous = rowsById.get(row.id) || {};
+    const merged = { ...previous };
+    HISTORY_LOG_FIELDS.forEach(field => {
+      const incoming = row[field];
+      if (incoming !== '' && incoming !== null && incoming !== undefined) merged[field] = incoming;
+      else if (merged[field] === undefined) merged[field] = incoming ?? '';
+    });
+    rowsById.set(row.id, merged);
   });
   return [...rowsById.values()];
+}
+
+function persistHistoryRowsCache(rows) {
+  const normalized = rows.map(normalizeHistoryLogRow);
+  try { localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(normalized)); }
+  catch (error) { console.error('HistoryLog cache write failed:', error); }
+  return normalized;
+}
+
+function driveFileId(fileUrl) {
+  try {
+    const url = new URL(fileUrl);
+    if (!/(^|\.)drive\.google\.com$/i.test(url.hostname)) return '';
+    return url.pathname.match(/\/file\/d\/([^/]+)/)?.[1] || url.searchParams.get('id') || '';
+  } catch { return ''; }
+}
+
+function safeDriveImageUrl(fileUrl) {
+  const id = driveFileId(fileUrl);
+  return id ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w1200` : fileUrl;
+}
+
+function inferEvidenceMimeType(fileName = '') {
+  const name = String(fileName).toLowerCase();
+  if (/\.png$/.test(name)) return 'image/png';
+  if (/\.(jpe?g)$/.test(name)) return 'image/jpeg';
+  if (/\.webp$/.test(name)) return 'image/webp';
+  if (/\.pdf$/.test(name)) return 'application/pdf';
+  return 'application/octet-stream';
+}
+
+function DriveImageThumbnail({ fileUrl, fileName, label }) {
+  const [failed, setFailed] = useState(false);
+  if (!fileUrl) return null;
+  if (failed) return <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-[10px] font-semibold text-sky-300 underline">{label}</a>;
+  return <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-16 w-20 items-center justify-center overflow-hidden rounded-md border border-slate-700 bg-slate-900" title={label}>
+    <img src={safeDriveImageUrl(fileUrl)} alt={fileName || label} loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" />
+  </a>;
 }
 
 function readLocalHistoryRows() {
@@ -424,7 +475,9 @@ async function readGasResponse(response) {
   if (!body) return {};
   try {
     const parsed = JSON.parse(body);
-    if (parsed?.success === false || parsed?.ok === false || parsed?.error) throw new Error(parsed.message || parsed.error || 'GAS returned an error');
+    if (parsed?.success === false || parsed?.success === 'false' || parsed?.ok === false || parsed?.status === 'error' || parsed?.result === 'error' || parsed?.error || parsed?.data?.success === false || parsed?.data?.error) {
+      throw new Error(parsed.message || parsed.error || parsed.data?.message || parsed.data?.error || 'GAS returned an error');
+    }
     return parsed;
   } catch (error) {
     if (error instanceof SyntaxError) return { message: body };
@@ -440,14 +493,30 @@ async function fetchHistoryLogFromGas() {
 }
 
 async function postHistoryLogToGas(payload) {
+  const bodyRow = normalizeHistoryLogRow(payload);
+  const body = { ...bodyRow };
+  if (payload.fileData) {
+    body.fileData = payload.fileData;
+    body.fileName = payload.fileName || bodyRow.file_name;
+    body.mimeType = payload.mimeType || 'application/octet-stream';
+  }
   const response = await fetch(GAS_WEB_APP_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   const result = await readGasResponse(response);
-  const returned = result?.record ?? result?.data?.record ?? (result?.data && !Array.isArray(result.data) ? result.data : result);
-  return normalizeHistoryLogRow({ ...payload, ...(returned && typeof returned === 'object' ? returned : {}) });
+  const dataRecord = Array.isArray(result?.data) ? result.data.find(item => item && typeof item === 'object' && (String(item.id || item.doc_no) === String(bodyRow.id))) : result?.data;
+  const arrayRecord = Array.isArray(result) ? result.find(item => item && typeof item === 'object' && (String(item.id || item.doc_no) === String(bodyRow.id))) : null;
+  const nestedRecord = result?.record || result?.row || result?.data?.record || result?.data?.row;
+  const returned = result && typeof result === 'object' && !Array.isArray(result)
+    ? { ...result, ...(dataRecord && typeof dataRecord === 'object' ? dataRecord : {}), ...(nestedRecord && typeof nestedRecord === 'object' ? nestedRecord : {}) }
+    : arrayRecord;
+  const successToken = typeof result === 'string' ? result : `${result?.status || ''} ${result?.result || ''} ${result?.message || ''}`;
+  const acknowledged = result?.success === true || result?.success === 'true' || result?.ok === true || result?.ok === 'true' ||
+    /(^|\s)(success(?:ful(?:ly)?)?|ok|saved|updated|added)(\s|[.!]|$)/i.test(successToken) || Boolean(returned?.id || returned?.doc_no || returned?.file_url || returned?.fileUrl);
+  if (!acknowledged) throw new Error(result?.message || 'GAS did not confirm that the HistoryLog row was saved');
+  return normalizeHistoryLogRow({ ...bodyRow, ...(returned && typeof returned === 'object' ? returned : {}) });
 }
 
 function legacyInspectionsToHistory(records, rooms) {
@@ -463,8 +532,22 @@ function legacyInspectionsToHistory(records, rooms) {
 }
 
 function historyRowsToInspections(rows, fallbackInspector = '') {
-  return rows.filter(row => ['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()))
+  return rows.filter(row => ['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()) || (row.doc_type === 'ri' && TASKS_13.includes(row.trade)))
     .map(row => historyRowToInspection(row, fallbackInspector));
+}
+
+function mergeInspectionRecords(rows, currentRecords, fallbackInspector = '') {
+  const currentById = new Map(currentRecords.map(record => [String(record.id), record]));
+  return historyRowsToInspections(rows, fallbackInspector).map(remote => {
+    const local = currentById.get(String(remote.id));
+    return {
+      ...local,
+      ...remote,
+      inspector: local?.inspector || remote.inspector,
+      photo: remote.photo ? { ...local?.photo, ...remote.photo } : local?.photo || null,
+      riDocument: remote.riDocument ? { ...local?.riDocument, ...remote.riDocument } : local?.riDocument || null,
+    };
+  });
 }
 
 function historyRowToDocument(row) {
@@ -534,7 +617,18 @@ async function savePendingHistoryPayload(recordId, payload) {
     const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
     const store = transaction.objectStore(EVIDENCE_STORE_NAME);
     const request = store.get(recordId);
-    request.onsuccess = () => store.put({ ...(request.result || {}), id: recordId, pendingGasPayload: payload });
+    request.onsuccess = () => {
+      const previous = request.result || {};
+      const previousPayload = previous.pendingGasPayload || {};
+      const mergedPayload = { ...previousPayload, ...payload };
+      if (!payload.fileData && previousPayload.fileData) {
+        mergedPayload.fileData = previousPayload.fileData;
+        mergedPayload.fileName = payload.fileName || previousPayload.fileName || previousPayload.file_name;
+        mergedPayload.mimeType = previousPayload.mimeType || 'application/octet-stream';
+      }
+      if (!payload.pendingFile && !mergedPayload.fileData && previousPayload.pendingFile) mergedPayload.pendingFile = previousPayload.pendingFile;
+      store.put({ ...previous, id: recordId, pendingGasPayload: mergedPayload });
+    };
     transaction.oncomplete = () => { db.close(); resolve(); };
     transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not queue offline record')); };
   });
@@ -703,45 +797,59 @@ export default function App() {
   const refreshHistory = useCallback(async (allowPendingWrites = session?.role === 'engineer') => {
     setSyncStatus('syncing');
     setSyncError(false);
-    try {
-      let remoteRows = await fetchHistoryLogFromGas();
-      let pendingIds = readPendingHistoryIds();
-      if (allowPendingWrites && session?.role === 'engineer' && pendingIds.length) {
-        const remaining = [];
-        for (const id of pendingIds) {
-          try {
-            const payload = await readPendingHistoryPayload(id);
-            if (!payload) { await clearPendingHistoryPayload(id); continue; }
-            let retryPayload = payload;
-            if (payload.pendingFile) {
-              const { pendingFile, ...metadata } = payload;
-              retryPayload = payload.fileData ? metadata : { ...metadata, fileData: await fileToBase64(pendingFile), fileName: metadata.fileName || metadata.file_name, mimeType: pendingFile.type || 'application/octet-stream' };
-            }
-            const saved = await postHistoryLogToGas(retryPayload);
-            remoteRows = mergeHistoryRows([saved], remoteRows);
-            await clearPendingHistoryPayload(id);
-          } catch (retryError) {
-            console.warn('Queued HistoryLog write is still pending:', retryError);
-            remaining.push(id);
-          }
-        }
-        pendingIds = remaining;
-        writePendingHistoryIds(remaining);
-      }
-      const merged = mergeHistoryRows(remoteRows, readLocalHistoryRows());
-      setHistoryRows(merged);
-      setInspectionRecords(historyRowsToInspections(merged, session?.name || ''));
-      setRooms(current => applyHistoryRowsToRooms(current, merged));
-      setSyncStatus(pendingIds.length ? 'offline' : 'synced');
-      setSyncError(pendingIds.length > 0);
-      setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
-      return merged;
-    } catch (error) {
-      console.warn('GAS HistoryLog sync failed; retaining local cache:', error);
-      setSyncStatus('offline');
-      setSyncError(true);
-      return null;
+    let remoteRows = [];
+    let readFailed = false;
+    try { remoteRows = await fetchHistoryLogFromGas(); }
+    catch (error) {
+      readFailed = true;
+      console.error('Could not read HistoryLog from GAS; continuing with cache and queued writes:', error);
     }
+
+    let pendingIds = readPendingHistoryIds();
+    if (allowPendingWrites && session?.role === 'engineer' && pendingIds.length) {
+      const remaining = [];
+      for (const id of pendingIds) {
+        try {
+          const payload = await readPendingHistoryPayload(id);
+          if (!payload) { await clearPendingHistoryPayload(id); continue; }
+          const remoteMatch = remoteRows.find(row => String(row.id) === String(id));
+          const remoteTime = Date.parse(remoteMatch?.updated_at || '') || 0;
+          const queuedTime = Date.parse(payload.updated_at || '') || 0;
+          const queuedHasFile = Boolean(payload.fileData || payload.pendingFile);
+          if (remoteMatch && remoteTime >= queuedTime && (!queuedHasFile || remoteMatch.file_url)) {
+            await clearPendingHistoryPayload(id);
+            continue;
+          }
+          let retryPayload = payload;
+          if (payload.pendingFile) {
+            const { pendingFile, ...metadata } = payload;
+            retryPayload = payload.fileData ? metadata : { ...metadata, fileData: await fileToBase64(pendingFile), fileName: metadata.fileName || metadata.file_name, mimeType: pendingFile.type || 'application/octet-stream' };
+          }
+          const saved = await postHistoryLogToGas(retryPayload);
+          remoteRows = mergeHistoryRows([saved], remoteRows);
+          await clearPendingHistoryPayload(id);
+        } catch (retryError) {
+          console.error(`Queued HistoryLog row ${id} could not be synced:`, retryError);
+          remaining.push(id);
+        }
+      }
+      pendingIds = remaining;
+      writePendingHistoryIds(remaining);
+      if (readFailed && remoteRows.length) {
+        try { remoteRows = mergeHistoryRows(await fetchHistoryLogFromGas(), remoteRows); readFailed = false; }
+        catch (error) { console.error('GAS accepted queued writes but the confirming read failed:', error); }
+      }
+    }
+
+    const merged = persistHistoryRowsCache(mergeHistoryRows(remoteRows, readLocalHistoryRows()));
+    setHistoryRows(merged);
+    setInspectionRecords(current => mergeInspectionRecords(merged, current, session?.name || ''));
+    setRooms(current => applyHistoryRowsToRooms(current, merged));
+    const failed = pendingIds.length > 0 || readFailed;
+    setSyncStatus(failed ? 'offline' : 'synced');
+    setSyncError(failed);
+    if (!readFailed) setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
+    return merged;
   }, [session, lang]);
 
   useEffect(() => {
@@ -771,21 +879,27 @@ export default function App() {
       setSyncStatus('syncing');
       setSyncError(false);
       const savedRow = await postHistoryLogToGas(payload);
+      try { await clearPendingHistoryPayload(row.id); }
+      catch (queueError) { console.error('Backend accepted the HistoryLog row, but its local queue entry could not be cleared yet:', queueError); }
+      writePendingHistoryIds(readPendingHistoryIds().filter(id => String(id) !== String(row.id)));
       let latestRows = [savedRow];
+      let readBackFailed = false;
       try {
         const responseRows = await fetchHistoryLogFromGas();
-        if (responseRows.length) latestRows = responseRows;
+        if (responseRows.length) latestRows = mergeHistoryRows([savedRow], responseRows);
       } catch (refreshError) {
-        console.warn('POST succeeded but the follow-up GET could not refresh:', refreshError);
+        readBackFailed = true;
+        console.error('POST succeeded, but the follow-up HistoryLog refresh failed; retaining the returned record:', refreshError);
       }
-      const updatedRows = mergeHistoryRows(latestRows, cached);
+      const updatedRows = persistHistoryRowsCache(mergeHistoryRows(latestRows, cached));
       setHistoryRows(updatedRows);
-      if (String(row.doc_type).toLowerCase().startsWith('inspection')) {
-        setInspectionRecords(historyRowsToInspections(updatedRows, session.name));
-        setRooms(current => applyHistoryRowsToRooms(current, updatedRows));
-      }
-      setSyncStatus('synced');
-      setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
+      setInspectionRecords(current => mergeInspectionRecords(updatedRows, current, session.name));
+      if (String(row.doc_type).toLowerCase().startsWith('inspection')) setRooms(current => applyHistoryRowsToRooms(current, updatedRows));
+      const hasPendingWrites = readPendingHistoryIds().length > 0;
+      const needsAttention = hasPendingWrites || readBackFailed;
+      setSyncStatus(needsAttention ? 'offline' : 'synced');
+      setSyncError(needsAttention);
+      if (!needsAttention) setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
       return { ...savedRow, _savedToBackend: true };
     } catch (error) {
       console.warn('GAS write failed; retaining the local HistoryLog row:', error);
@@ -877,7 +991,7 @@ export default function App() {
         <div role="status" className="fixed left-3 right-3 top-5 z-50 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-400 bg-emerald-700 px-4 py-3 text-white shadow-2xl sm:left-auto sm:right-5 sm:max-w-lg">
           <CheckCircle2 className="h-5 w-5 shrink-0" />
           <span className="min-w-0 flex-1 text-sm font-medium">{toastMessage.message}</span>
-          {toastMessage.link && <a href={toastMessage.link} target="_blank" rel="noreferrer" className="text-xs font-bold underline underline-offset-2">{t.documents.openFile}</a>}
+          {toastMessage.link && <a href={toastMessage.link} target="_blank" rel="noopener noreferrer" className="text-xs font-bold underline underline-offset-2">{t.documents.openFile}</a>}
         </div>
       )}
 
@@ -1045,7 +1159,7 @@ export default function App() {
       </div>
 
       {/* --- GLOBAL ROOM INSPECTION MODAL --- */}
-      {modalRoom && <RoomDetailModal room={modalRoom} t={t} lang={lang} records={inspectionRecords} showToast={showToast} onClose={() => setModalRoom(null)} />}
+      {modalRoom && <RoomDetailModal room={modalRoom} t={t} records={inspectionRecords} showToast={showToast} onClose={() => setModalRoom(null)} />}
     </div>
     </LocalizedUI>
   );
@@ -1569,7 +1683,7 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
             {grouped.size === 0 ? <p className="rounded-lg bg-slate-900/60 p-4 text-xs text-slate-400">{labels.noRecords}</p> : [...grouped.entries()].map(([building, floors]) => <section key={building} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"><h3 className="mb-3 text-xs font-bold text-emerald-300">{labels.building}: {displayBuilding(building)}</h3>
               <div className="space-y-3">{[...floors.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([floor, floorRooms]) => <div key={floor}><h4 className="mb-2 text-[11px] font-semibold text-slate-300">{labels.floor} {floor}</h4><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{[...floorRooms.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([roomNumber, roomRecords]) => {
                 const room = rooms.find(item => String(item.roomNumber) === roomNumber);
-                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p>{record.file_url && <a href={record.file_url} target="_blank" rel="noreferrer" className="mt-2 inline-block font-semibold text-sky-300 underline">{labels.fileLink}</a>}{record.folder_path && <p className="mt-1 break-all text-slate-500">{labels.folderPath}: {record.folder_path}</p>}</div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
+                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p>{record.photo?.file_url && <DriveImageThumbnail key={`${record.id}:${record.photo.file_url}`} fileUrl={record.photo.file_url} fileName={record.photo.name} label={labels.fileLink} />}{record.file_url && <a href={record.file_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold text-sky-300 underline">{labels.fileLink}</a>}{record.folder_path && <p className="mt-1 break-all text-slate-500">{labels.folderPath}: {record.folder_path}</p>}</div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
               })}</div></div>)}</div>
             </section>)}
           </div>
@@ -1599,6 +1713,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
   const [reasonDoc, setReasonDoc] = useState(null);
   const [reasonText, setReasonText] = useState('');
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [previewImageFailed, setPreviewImageFailed] = useState(false);
   const [formError, setFormError] = useState('');
   const [today, setToday] = useState(() => getLocalDateString());
   const lastCheckedDate = useRef(today);
@@ -1708,7 +1823,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
     else if (doc.file_url) window.open(doc.file_url, '_blank', 'noopener,noreferrer');
     else downloadFile(`${doc.name}\n${labels.referenceNumber}: ${doc.reference}\n${labels.category}: ${displayCategory(doc.category)}\n${labels.date}: ${doc.date}`, `${doc.name}.txt`);
   };
-  const handlePreview = doc => setSelectedDoc({ ...doc, previewUrl: doc.file ? URL.createObjectURL(doc.file) : null });
+  const handlePreview = doc => { setPreviewImageFailed(false); setSelectedDoc({ ...doc, previewUrl: doc.file ? URL.createObjectURL(doc.file) : null }); };
   const markComplete = doc => {
     const updated = { ...doc, status: 'completed', completedAt: today };
     setDocs(current => current.map(item => item.id === doc.id ? updated : item));
@@ -1752,7 +1867,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 p-4"><h3 className="text-sm font-bold text-slate-100">{displayBuilding(path.building)} · {labels.floor} {path.floor} · {labels.room} {path.room} · {displayCategory(path.category)}</h3><span className="text-[10px] text-slate-400">{labels.referenceNumber} / {labels.date}</span></div>
         {!docsAtPath.length ? <p className="p-6 text-center text-xs text-slate-400">{labels.empty}</p> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
           const status = lifecycle(doc);
-          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.file_url && <a href={doc.file_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-sky-300 underline">{labels.openFile}</a>}{doc.folder_path && <p className="mt-1 break-all text-[10px] text-slate-500">{labels.folderPath}: {doc.folder_path}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}</div></div>
+          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.file_url && inferEvidenceMimeType(doc.file_name || doc.name).startsWith('image/') && <DriveImageThumbnail key={`${doc.id}:${doc.file_url}`} fileUrl={doc.file_url} fileName={doc.file_name || doc.name} label={labels.openFile} />}{doc.file_url && <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-sky-300 underline">{labels.openFile}</a>}{doc.folder_path && <p className="mt-1 break-all text-[10px] text-slate-500">{labels.folderPath}: {doc.folder_path}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}</div></div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status === 'expired' ? 'bg-red-500/15 text-red-300' : status === 'completed' ? 'bg-emerald-500/15 text-emerald-300' : status === 'archived' ? 'bg-slate-600/30 text-slate-300' : 'bg-amber-500/15 text-amber-300'}`}>{displayStatus(status)}</span><button type="button" onClick={() => handlePreview(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={labels.documentPreview} title={labels.documentPreview}><Eye className="h-4 w-4"/></button><button type="button" onClick={() => handleDownload(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={t.common.export} title={t.common.export}><Download className="h-4 w-4"/></button>{canEdit && status === 'pending' && doc.documentType === 'ri' && <button type="button" onClick={() => markComplete(doc)} className="rounded-md bg-emerald-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-emerald-600">{labels.markComplete}</button>}{canEdit && status === 'expired' && <button type="button" onClick={() => { setReasonDoc(doc); setReasonText(doc.reasonReport || ''); }} className="rounded-md bg-red-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-red-600">{labels.archive}</button>}</div>
           </article>;
         })}</div>}
@@ -1772,7 +1887,9 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
 
     {reasonDoc && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-3 sm:p-5"><form onSubmit={submitReason} className="w-full max-w-lg space-y-4 rounded-2xl border border-red-900 bg-slate-800 p-5 shadow-2xl sm:p-6"><div><h3 className="text-base font-bold text-red-200">{labels.expiredTitle}</h3><p className="mt-1 text-xs text-slate-400">{labels.expiredDescription}</p><p className="mt-2 text-xs text-slate-300">{reasonDoc.reference} · {reasonDoc.name}</p></div><label className="block space-y-1.5 text-xs font-semibold text-slate-200"><span>{labels.reasonLabel} *</span><textarea autoFocus required minLength={5} value={reasonText} onChange={event => setReasonText(event.target.value)} placeholder={labels.reasonPlaceholder} rows={5} className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-red-400 focus:outline-none"/></label><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setReasonDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200">{labels.cancel}</button><button type="submit" disabled={reasonText.trim().length < 5} className="rounded-lg bg-red-700 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{labels.archive}</button></div></form></div>}
 
-    {selectedDoc && <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/75 p-3 sm:p-5"><section role="dialog" aria-modal="true" aria-label={labels.documentPreview} className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-800"><header className="flex items-center justify-between gap-3 border-b border-slate-700 p-4"><div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-100">{labels.documentPreview}</h3><p className="truncate text-[10px] text-slate-400">{selectedDoc.reference} · {selectedDoc.name}</p></div><button type="button" onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 p-2 text-slate-200"><X className="h-4 w-4"/></button></header><div className="grid min-h-56 place-items-center bg-slate-950 p-3 text-center text-xs text-slate-400 sm:min-h-80">{selectedDoc.previewUrl && selectedDoc.file?.type.startsWith('image/') ? <img src={selectedDoc.previewUrl} alt={selectedDoc.name} className="max-h-[65vh] max-w-full object-contain"/> : selectedDoc.previewUrl && selectedDoc.file?.type === 'application/pdf' ? <iframe title={selectedDoc.name} src={selectedDoc.previewUrl} className="h-[65vh] w-full rounded bg-white"/> : <div><FileText className="mx-auto mb-2 h-9 w-9 text-emerald-400"/><p>{selectedDoc.name}</p><p className="mt-1">{displayType(selectedDoc.documentType)} · {displayStatus(lifecycle(selectedDoc))}</p></div>}</div><footer className="flex flex-col-reverse gap-2 border-t border-slate-700 p-3 sm:flex-row sm:justify-end"><button onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200">{t.common.close}</button><button onClick={() => { handleDownload(selectedDoc); setSelectedDoc(null); }} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white">{t.common.export}</button></footer></section></div>}
+    {selectedDoc && <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/75 p-3 sm:p-5"><section role="dialog" aria-modal="true" aria-label={labels.documentPreview} className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-800"><header className="flex items-center justify-between gap-3 border-b border-slate-700 p-4"><div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-100">{labels.documentPreview}</h3><p className="truncate text-[10px] text-slate-400">{selectedDoc.reference} · {selectedDoc.name}</p></div><button type="button" onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 p-2 text-slate-200"><X className="h-4 w-4"/></button></header><div className="grid min-h-56 place-items-center bg-slate-950 p-3 text-center text-xs text-slate-400 sm:min-h-80">
+      {selectedDoc.previewUrl && (selectedDoc.file?.type.startsWith('image/') || inferEvidenceMimeType(selectedDoc.name).startsWith('image/')) ? <img src={selectedDoc.previewUrl} alt={selectedDoc.name} className="max-h-[65vh] max-w-full object-contain"/> : selectedDoc.previewUrl && selectedDoc.file?.type === 'application/pdf' ? <iframe title={selectedDoc.name} src={selectedDoc.previewUrl} className="h-[65vh] w-full rounded bg-white"/> : selectedDoc.file_url && inferEvidenceMimeType(selectedDoc.file_name || selectedDoc.name).startsWith('image/') && !previewImageFailed ? <img src={safeDriveImageUrl(selectedDoc.file_url)} alt={selectedDoc.name} onError={() => setPreviewImageFailed(true)} className="max-h-[65vh] max-w-full object-contain"/> : selectedDoc.file_url && inferEvidenceMimeType(selectedDoc.file_name || selectedDoc.name).startsWith('image/') && previewImageFailed ? <iframe title={selectedDoc.name} src={selectedDoc.file_url} className="h-[65vh] w-full rounded bg-white"/> : selectedDoc.file_url && (inferEvidenceMimeType(selectedDoc.file_name || selectedDoc.name) === 'application/pdf' || selectedDoc.name.toLowerCase().endsWith('.pdf')) ? <iframe title={selectedDoc.name} src={selectedDoc.file_url} className="h-[65vh] w-full rounded bg-white"/> : <div><FileText className="mx-auto mb-2 h-9 w-9 text-emerald-400"/><p>{selectedDoc.name}</p><p className="mt-1">{displayType(selectedDoc.documentType)} · {displayStatus(lifecycle(selectedDoc))}</p></div>}
+      </div><footer className="flex flex-col-reverse gap-2 border-t border-slate-700 p-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap gap-2">{selectedDoc.file_url && <a href={selectedDoc.file_url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-200">{labels.openFile}</a>}<button onClick={() => { handleDownload(selectedDoc); setSelectedDoc(null); }} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white">{t.common.export}</button></div><button onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200">{t.common.close}</button></footer></section></div>}
   </div>;
 }
 
@@ -1960,7 +2077,7 @@ function RoomPlan({ room, t }) {
   </section>;
 }
 
-function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
+function RoomDetailModal({ room, t, records = [], showToast, onClose }) {
   const [evidencePreview, setEvidencePreview] = useState(null);
   const [loadingEvidence, setLoadingEvidence] = useState('');
   useEffect(() => () => {
@@ -1979,18 +2096,21 @@ function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
       const remoteUrl = record.file_url || record.photo?.file_url || record.riDocument?.file_url || '';
       const metadata = kind === 'photo' ? record.photo : record.riDocument;
       if (!blob && remoteUrl) {
-        setEvidencePreview({ url: remoteUrl, type: 'remote', name: metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document'), kind, ownedUrl: false, remote: true });
+        const name = metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document');
+        const mimeType = metadata?.type || inferEvidenceMimeType(name);
+        const isImage = kind === 'photo' || mimeType.startsWith('image/');
+        setEvidencePreview({ url: isImage ? safeDriveImageUrl(remoteUrl) : remoteUrl, fallbackUrl: remoteUrl, type: mimeType, name, kind, ownedUrl: false, remote: true, isImage });
         return;
       }
       if (!blob) {
-        showToast?.(lang === 'th' ? 'ไม่พบไฟล์หลักฐาน' : 'Evidence file is unavailable');
+        showToast?.(t.records.evidenceUnavailable);
         return;
       }
       const url = URL.createObjectURL(blob);
-      setEvidencePreview({ url, type: blob.type || metadata?.type || '', name: metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document'), kind, ownedUrl: true });
+      setEvidencePreview({ url, type: blob.type || metadata?.type || inferEvidenceMimeType(metadata?.name), name: metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document'), kind, ownedUrl: true, remote: false });
     } catch (error) {
       console.error('Unable to open inspection evidence:', error);
-      showToast?.(lang === 'th' ? 'ไม่สามารถเปิดไฟล์หลักฐานได้' : 'Could not open the evidence file');
+      showToast?.(t.records.evidenceError);
     } finally {
       setLoadingEvidence('');
     }
@@ -2044,8 +2164,8 @@ function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
                     <StatusBadge status={taskStatus} t={t} />
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <button type="button" disabled={!photoRecord || loadingEvidence === `${photoRecord?.id}:photo`} onClick={() => photoRecord && openEvidence(photoRecord, 'photo')} className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-semibold text-sky-300 enabled:hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={photoRecord ? 'View Photos' : 'No photo evidence'}><Eye className="h-3 w-3" />View Photos</button>
-                    <button type="button" disabled={!riRecord || loadingEvidence === `${riRecord?.id}:ri`} onClick={() => riRecord && openEvidence(riRecord, 'ri')} className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300 enabled:hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={riRecord ? 'View RI Document' : 'No RI document'}><FileText className="h-3 w-3" />View RI Document</button>
+                    <button type="button" disabled={!photoRecord || loadingEvidence === `${photoRecord?.id}:photo`} onClick={() => photoRecord && openEvidence(photoRecord, 'photo')} className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-semibold text-sky-300 enabled:hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={t.records.viewPhotos}><Eye className="h-3 w-3" />{t.records.viewPhotos}</button>
+                    <button type="button" disabled={!riRecord || loadingEvidence === `${riRecord?.id}:ri`} onClick={() => riRecord && openEvidence(riRecord, 'ri')} className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300 enabled:hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={t.records.viewRiDocument}><FileText className="h-3 w-3" />{t.records.viewRiDocument}</button>
                   </div>
                 </div>
               );
@@ -2057,11 +2177,11 @@ function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
       </div>
       {evidencePreview && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4" onClick={() => setEvidencePreview(null)}>
         <section role="dialog" aria-modal="true" aria-label="Evidence Preview" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl" onClick={event => event.stopPropagation()}>
-          <header className="flex items-center justify-between gap-3 border-b border-slate-700 px-4 py-3"><div className="min-w-0"><h3 className="text-sm font-bold text-slate-100">Evidence Preview</h3><p className="truncate text-xs text-slate-400">{evidencePreview.name}</p></div><button type="button" onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-800 p-2 text-slate-300 hover:bg-slate-700" aria-label="Close preview"><X className="h-4 w-4" /></button></header>
+          <header className="flex items-center justify-between gap-3 border-b border-slate-700 px-4 py-3"><div className="min-w-0"><h3 className="text-sm font-bold text-slate-100">{t.records.evidencePreview}</h3><p className="truncate text-xs text-slate-400">{evidencePreview.name}</p></div><button type="button" onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-800 p-2 text-slate-300 hover:bg-slate-700" aria-label={t.common.close}><X className="h-4 w-4" /></button></header>
           <div className="min-h-0 flex-1 overflow-auto bg-slate-950 p-3">
-            {evidencePreview.remote ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : evidencePreview.type.startsWith('image/') ? <img src={evidencePreview.url} alt={evidencePreview.name} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.type === 'application/pdf' || evidencePreview.name.toLowerCase().endsWith('.pdf') ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : <div className="grid h-48 place-items-center text-center"><div><FileText className="mx-auto mb-2 h-8 w-8 text-slate-400" /><a href={evidencePreview.url} download={evidencePreview.name} className="text-sm font-semibold text-sky-300 underline">Open or download file</a></div></div>}
+            {evidencePreview.remote && evidencePreview.isImage && !evidencePreview.imageFallback ? <img src={evidencePreview.url} alt={evidencePreview.name} onError={() => setEvidencePreview(current => current ? { ...current, url: current.fallbackUrl, imageFallback: true } : current)} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.remote ? <iframe title={evidencePreview.name} src={evidencePreview.fallbackUrl || evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : evidencePreview.type.startsWith('image/') ? <img src={evidencePreview.url} alt={evidencePreview.name} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.type === 'application/pdf' || evidencePreview.name.toLowerCase().endsWith('.pdf') ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : <div className="grid h-48 place-items-center text-center"><div><FileText className="mx-auto mb-2 h-8 w-8 text-slate-400" /><a href={evidencePreview.url} download={evidencePreview.name} className="text-sm font-semibold text-sky-300 underline">{t.records.fileLink}</a></div></div>}
           </div>
-          <footer className="flex justify-end border-t border-slate-700 px-4 py-3"><a href={evidencePreview.url} download={evidencePreview.name} target="_blank" rel="noreferrer" className="mr-auto self-center text-xs text-sky-300 underline">Open or download file</a><button onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-600">{t.common.close}</button></footer>
+          <footer className="flex justify-end border-t border-slate-700 px-4 py-3"><a href={evidencePreview.fallbackUrl || evidencePreview.url} download={evidencePreview.name} target="_blank" rel="noopener noreferrer" className="mr-auto self-center text-xs text-sky-300 underline">{t.records.fileLink}</a><button onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-600">{t.common.close}</button></footer>
         </section>
       </div>}
     </div>
