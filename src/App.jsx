@@ -387,10 +387,11 @@ function readLocalHistoryRows() {
 
 function historyRowToInspection(row, inspector = '') {
   return {
-    id: row.id, building: canonicalBuilding(row.building, row.floor), floor: String(row.floor || ''), roomNumber: String(row.room), task: row.trade, status: row.status,
+    id: row.id, evidence_id: String(row.doc_type).toLowerCase() === 'ri' && String(row.id).endsWith('-ri') ? String(row.id).slice(0, -3) : row.id,
+    building: canonicalBuilding(row.building, row.floor), floor: String(row.floor || ''), roomNumber: String(row.room), task: row.trade, status: row.status,
     remarks: row.reason, date: row.updated_at, inspector,
-    photo: row.doc_type === 'inspection' && row.file_url ? { name: row.file_name, type: '' } : null,
-    riDocument: row.doc_type === 'ri' && row.file_url ? { name: row.file_name, type: '' } : null,
+    photo: row.doc_type === 'inspection' && (row.file_url || row.file_name) ? { name: row.file_name, type: '', file_url: row.file_url } : null,
+    riDocument: row.doc_type === 'ri' && (row.file_url || row.file_name) ? { name: row.file_name, type: '', file_url: row.file_url } : null,
     file_url: row.file_url, folder_path: row.folder_path,
   };
 }
@@ -1318,7 +1319,7 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, selectedSt
 // ==========================================
 // MODULE 3: NEW INSPECTION FORM
 // ==========================================
-function RoomInspectionFormView({ lang, showToast, rooms, onSubmitInspection }) {
+function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection }) {
   const labels = i18n[lang].form;
   const taskOptions = lang === 'th' ? TASKS_13_TH : TASKS_13;
   const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.roomNumber || '101');
@@ -1970,13 +1971,22 @@ function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
     const key = `${record.id}:${kind}`;
     setLoadingEvidence(key);
     try {
-      const blob = await loadInspectionEvidence(record.id, kind);
+      let blob = null;
+      try { blob = await loadInspectionEvidence(record.evidence_id || record.id, kind); }
+      catch (storageError) {
+        if (!(record.file_url || record.photo?.file_url || record.riDocument?.file_url)) throw storageError;
+      }
+      const remoteUrl = record.file_url || record.photo?.file_url || record.riDocument?.file_url || '';
+      const metadata = kind === 'photo' ? record.photo : record.riDocument;
+      if (!blob && remoteUrl) {
+        setEvidencePreview({ url: remoteUrl, type: 'remote', name: metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document'), kind, ownedUrl: false, remote: true });
+        return;
+      }
       if (!blob) {
         showToast?.(lang === 'th' ? 'ไม่พบไฟล์หลักฐาน' : 'Evidence file is unavailable');
         return;
       }
       const url = URL.createObjectURL(blob);
-      const metadata = kind === 'photo' ? record.photo : record.riDocument;
       setEvidencePreview({ url, type: blob.type || metadata?.type || '', name: metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document'), kind, ownedUrl: true });
     } catch (error) {
       console.error('Unable to open inspection evidence:', error);
@@ -2049,7 +2059,7 @@ function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
         <section role="dialog" aria-modal="true" aria-label="Evidence Preview" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl" onClick={event => event.stopPropagation()}>
           <header className="flex items-center justify-between gap-3 border-b border-slate-700 px-4 py-3"><div className="min-w-0"><h3 className="text-sm font-bold text-slate-100">Evidence Preview</h3><p className="truncate text-xs text-slate-400">{evidencePreview.name}</p></div><button type="button" onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-800 p-2 text-slate-300 hover:bg-slate-700" aria-label="Close preview"><X className="h-4 w-4" /></button></header>
           <div className="min-h-0 flex-1 overflow-auto bg-slate-950 p-3">
-            {evidencePreview.type.startsWith('image/') ? <img src={evidencePreview.url} alt={evidencePreview.name} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.type === 'application/pdf' || evidencePreview.name.toLowerCase().endsWith('.pdf') ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : <div className="grid h-48 place-items-center text-center"><div><FileText className="mx-auto mb-2 h-8 w-8 text-slate-400" /><a href={evidencePreview.url} download={evidencePreview.name} className="text-sm font-semibold text-sky-300 underline">Open or download file</a></div></div>}
+            {evidencePreview.remote ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : evidencePreview.type.startsWith('image/') ? <img src={evidencePreview.url} alt={evidencePreview.name} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.type === 'application/pdf' || evidencePreview.name.toLowerCase().endsWith('.pdf') ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : <div className="grid h-48 place-items-center text-center"><div><FileText className="mx-auto mb-2 h-8 w-8 text-slate-400" /><a href={evidencePreview.url} download={evidencePreview.name} className="text-sm font-semibold text-sky-300 underline">Open or download file</a></div></div>}
           </div>
           <footer className="flex justify-end border-t border-slate-700 px-4 py-3"><a href={evidencePreview.url} download={evidencePreview.name} target="_blank" rel="noreferrer" className="mr-auto self-center text-xs text-sky-300 underline">Open or download file</a><button onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-600">{t.common.close}</button></footer>
         </section>
