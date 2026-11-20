@@ -4,19 +4,23 @@ import {
   Building2, LayoutDashboard, Grid, ClipboardCheck, History, FolderKanban, 
   Bot, CheckCircle2, AlertTriangle, Clock, Search, 
   Upload, Mic, FileText, Download, Eye, Languages, 
-  Bell, Sparkles, X, FileSpreadsheet, Menu, LogOut, RefreshCw,
+  Bell, Sparkles, X, FileSpreadsheet, Menu, LogOut,
   Camera, FileDown as FilePdf
 } from 'lucide-react';
 
-const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxvXq7Asy_hQPyUVRIT9jCK0vppYQCDhsDxC0CdblmyBqwEXMopX7pQYz8-laC8C031_A/exec';
 const HISTORY_LOG_CACHE_KEY = 'trex_history_log_cache';
-const HISTORY_LOG_PENDING_KEY = 'trex_history_log_pending';
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const HISTORY_LOG_FIELDS = ['id', 'building', 'floor', 'room', 'trade', 'doc_no', 'doc_type', 'appointment_date', 'status', 'reason', 'file_name', 'file_url', 'folder_path', 'updated_at'];
 const BUILDING_A = 'อาคาร A';
 const BUILDING_B = 'อาคาร B';
 const BUILDING_VALUES = [BUILDING_A, BUILDING_B];
 const PROJECT_BUILDING_NAME = BUILDING_A;
+const FLOORS = [1, 2, 3, 4, 5, 6, 7, 8];
+const PROJECT_OPTIONS = [
+  { id: '00428', name: 'Boutique Bangkok Sukhumvit 5' },
+  { id: '00434', name: 'Reference Kaset District' },
+  { id: '00446', name: 'Plum Condo Ladprao' },
+];
 
 function canonicalBuilding(value, floor = '') {
   const normalized = String(value || '').trim().toLowerCase();
@@ -27,7 +31,7 @@ function canonicalBuilding(value, floor = '') {
 }
 
 function canonicalizeRooms(rooms) {
-  return rooms.map(room => ({ ...room, building: canonicalBuilding(room.building, room.floor) }));
+  return rooms.map(room => ({ ...room, building: canonicalBuilding(room.building, room.floor), tasks: Object.fromEntries(Object.entries(room.tasks || {}).map(([task, status]) => [canonicalTask(task), status])) }));
 }
 
 // --- DICTIONARY FOR BILINGUAL SUPPORT ---
@@ -38,12 +42,12 @@ const i18n = {
     projectTitle: "Boutique Bangkok Sukhumvit 5",
     siteEngineer: "นายธนโชค ซี. (Site Engineer)",
     auth: {
-      title: "เข้าสู่ระบบ T-REX", subtitle: "ระบบติดตามและจัดการงานก่อสร้าง", name: "ชื่อผู้ใช้งาน", namePlaceholder: "กรอกชื่อของคุณ",
+      title: "เข้าสู่ระบบ T-REX", subtitle: "ระบบติดตามและจัดการงานก่อสร้าง", name: "ชื่อผู้ใช้งาน", namePlaceholder: "กรอกชื่อของคุณ", project: "เลือกโครงการ",
       role: "เลือกบทบาท", engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", login: "เข้าสู่ระบบ", language: "ภาษา",
       engineerAccess: "จัดการการตรวจ เอกสาร สถานะ และรายงานได้", viewerAccess: "ดูแดชบอร์ด ผังชั้น ประวัติ และเอกสารได้เท่านั้น"
     },
     role: { engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", logout: "ออกจากระบบ", activeUser: "ผู้ใช้งานปัจจุบัน" },
-    sync: { synced: "ซิงก์แล้ว", syncing: "กำลังซิงก์...", offline: "ออฟไลน์ / ใช้ข้อมูลในเครื่อง", refresh: "รีเฟรช / ซิงก์", fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "ซิงก์ไม่สำเร็จ บันทึกข้อมูลไว้ในเครื่องแล้ว", syncFailed: "เชื่อมต่อ GAS ไม่สำเร็จ กำลังใช้ข้อมูลในเครื่อง", connectionGuide: "ตรวจสอบว่า Deploy /api/history และเผยแพร่ GAS Web App ให้เข้าถึงได้โดยไม่ต้องเข้าสู่ระบบ (Anyone); หากเรียกจากเบราว์เซอร์โดยตรง GET ต้องรองรับ JSONP (prefix)", uploadSuccess: "บันทึกข้อมูลลง Google Drive และ HistoryLog แล้ว", lastSync: "ซิงก์ล่าสุด", uploading: "กำลังอัปโหลดและบันทึก...", uploadSuccessLink: "อัปโหลดสำเร็จ เปิดไฟล์ใน Google Drive" },
+    storage: { fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "บันทึกไฟล์ในอุปกรณ์ไม่สำเร็จ", saving: "กำลังบันทึก..." },
     documents: {
       title: "ศูนย์เอกสารโครงการ", subtitle: "เลือกตามอาคาร ชั้น ห้อง และหมวดงานเพื่อดูเอกสาร",
       upload: "อัปโหลดเอกสาร", type: "ประเภทเอกสาร", typeGeneral: "เอกสารทั่วไป", typeRI: "Request for Inspection (RI)", typeInspection: "รายงานการตรวจ", typeDefect: "รายงานข้อบกพร่อง",
@@ -134,12 +138,12 @@ const i18n = {
     projectTitle: "Boutique Bangkok Sukhumvit 5",
     siteEngineer: "Tanachock C. (Site Engineer)",
     auth: {
-      title: "Sign in to T-REX", subtitle: "Construction tracking and management platform", name: "Your name", namePlaceholder: "Enter your name",
+      title: "Sign in to T-REX", subtitle: "Construction tracking and management platform", name: "Your name", namePlaceholder: "Enter your name", project: "Select Project",
       role: "Choose a role", engineer: "Site Engineer", viewer: "Viewer / Guest", login: "Sign in", language: "Language",
       engineerAccess: "Manage inspections, documents, statuses, and reports", viewerAccess: "View dashboard, floor map, records, and documents only"
     },
     role: { engineer: "Site Engineer", viewer: "Viewer / Guest", logout: "Log out", activeUser: "Signed in as" },
-    sync: { synced: "Synced", syncing: "Syncing...", offline: "Offline / Local Cache", refresh: "Refresh / Sync", fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Sync failed; the record is saved in the local cache.", syncFailed: "Could not connect to GAS. Showing the local cache.", connectionGuide: "Check that /api/history is deployed and the GAS Web App is accessible without sign-in (Anyone). If the browser calls GAS directly, GET must support JSONP (the prefix parameter).", uploadSuccess: "Saved to Google Drive and HistoryLog.", lastSync: "Last synced", uploading: "Uploading and saving...", uploadSuccessLink: "Upload complete. Open in Google Drive" },
+    storage: { fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Could not save the file on this device", saving: "Saving..." },
     documents: {
       title: "Project Document Hub", subtitle: "Drill down by building, floor, room, and work category",
       upload: "Upload Document", type: "Document Type", typeGeneral: "General Document", typeRI: "Request for Inspection (RI)", typeInspection: "Inspection Report", typeDefect: "Defect Report",
@@ -334,6 +338,14 @@ const TASKS_13_TH = [
   "ฉาบปูนผนัง", "ฉาบสกิมโค้ต", "ปรับระดับพื้น", "ทาสีรองพื้น", "ทาสีจริงครั้งที่ 1", "ทาสีจริงครั้งที่ 2",
   "ปูกระเบื้องห้องน้ำ", "โครงฝ้าเพดาน", "แผ่นฝ้าเพดาน", "ประตูหลัก", "ประตูห้องน้ำ", "ฉากกั้นอาบน้ำ", "บัวเชิงผนัง"
 ];
+const taskLabel = (task, lang) => {
+  const index = TASKS_13.indexOf(task);
+  return index >= 0 ? (lang === 'th' ? TASKS_13_TH[index] : TASKS_13[index]) : task;
+};
+const canonicalTask = task => {
+  const thaiIndex = TASKS_13_TH.indexOf(task);
+  return thaiIndex >= 0 ? TASKS_13[thaiIndex] : task;
+};
 
 function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -357,22 +369,10 @@ function normalizeHistoryLogRow(value = {}) {
   row.id = String(row.id || row.doc_no || crypto.randomUUID());
   row.building = canonicalBuilding(row.building, row.floor);
   row.doc_type = String(row.doc_type || '').trim().toLowerCase();
+  row.trade = canonicalTask(row.trade);
   row.floor = String(row.floor ?? '');
   row.room = String(row.room ?? '');
   return row;
-}
-
-function extractHistoryRows(payload) {
-  let candidate = payload;
-  for (let depth = 0; depth < 4 && !Array.isArray(candidate); depth += 1) {
-    candidate = candidate?.data ?? candidate?.records ?? candidate?.rows ?? candidate?.historyLog ?? candidate?.history_log ?? candidate?.values ?? [];
-  }
-  if (!Array.isArray(candidate)) return [];
-  if (candidate.length && Array.isArray(candidate[0])) {
-    const headers = candidate[0].map(String);
-    return candidate.slice(1).map(values => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])));
-  }
-  return candidate.filter(row => row && typeof row === 'object').map(normalizeHistoryLogRow);
 }
 
 function mergeHistoryRows(primaryRows, cachedRows) {
@@ -429,6 +429,29 @@ function DriveImageThumbnail({ fileUrl, fileName, label }) {
   </a>;
 }
 
+function LocalEvidenceButton({ record, kind, label, lang }) {
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  const open = async () => {
+    const fileUrl = kind === 'photo' ? record.photo?.file_url : record.riDocument?.file_url;
+    if (fileUrl) { window.open(fileUrl, '_blank', 'noopener,noreferrer'); return; }
+    try {
+      const id = kind === 'ri' && record.riDocument?.document_id ? record.riDocument.document_id : record.evidence_id || record.id;
+      const blob = await loadInspectionEvidence(id, kind === 'ri' && record.riDocument?.document_id ? 'photo' : kind);
+      if (!blob) throw new Error('Evidence is not available in local storage');
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(blob));
+      setError('');
+    } catch (cause) {
+      console.error('Could not open local inspection evidence:', cause);
+      setError(lang === 'th' ? 'ไม่พบไฟล์ในอุปกรณ์นี้' : 'File is not available on this device');
+    }
+  };
+  const fileName = kind === 'photo' ? record.photo?.name : record.riDocument?.name;
+  return <><button type="button" onClick={open} className="mt-2 mr-2 inline-flex rounded-md bg-sky-900/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-sky-800">{label}</button>{error && <span role="alert" className="text-rose-300">{error}</span>}{previewUrl && <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 p-3" onClick={() => setPreviewUrl('')}><section className="w-full max-w-4xl overflow-hidden rounded-xl border border-slate-600 bg-slate-900" onClick={event => event.stopPropagation()}><header className="flex items-center justify-between gap-3 p-3 text-sm font-semibold text-white"><span className="truncate">{fileName}</span><button type="button" onClick={() => setPreviewUrl('')} aria-label={lang === 'th' ? 'ปิด' : 'Close'}><X className="h-4 w-4" /></button></header>{inferEvidenceMimeType(fileName).startsWith('image/') ? <img src={previewUrl} alt={fileName || label} className="mx-auto max-h-[72vh] max-w-full object-contain" /> : <iframe title={fileName || label} src={previewUrl} className="h-[72vh] w-full bg-white" />}<footer className="flex justify-end border-t border-slate-700 p-3"><a href={previewUrl} download={fileName} className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white">{lang === 'th' ? 'ดาวน์โหลด' : 'Download'}</a></footer></section></div>}</>;
+}
+
 function readLocalHistoryRows() {
   try {
     const cached = JSON.parse(localStorage.getItem(HISTORY_LOG_CACHE_KEY) || '[]');
@@ -451,155 +474,9 @@ function toHistoryLogRow({ id, building, floor, room, trade, docNo, docType, app
   return normalizeHistoryLogRow({ id, building, floor, room, trade, doc_no: docNo, doc_type: docType, appointment_date: appointmentDate, status, reason, file_name: fileName, file_url: fileUrl, folder_path: folderPath, updated_at: updatedAt });
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const separator = result.indexOf(',');
-      resolve(separator >= 0 ? result.slice(separator + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error || new Error('Could not read the selected file'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function buildDriveFileName(building, floor, room, docNo, originalFileName) {
   const cleanPart = value => String(value || '').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
   return [building, floor, room, docNo, originalFileName].map(cleanPart).filter(Boolean).join('_');
-}
-
-async function readGasResponse(response) {
-  const body = await response.text();
-  if (!response.ok) throw new Error(`GAS request failed (${response.status})`);
-  if (!body) return {};
-  try {
-    const parsed = JSON.parse(body);
-    if (parsed?.success === false || parsed?.success === 'false' || parsed?.ok === false || parsed?.status === 'error' || parsed?.result === 'error' || parsed?.error || parsed?.data?.success === false || parsed?.data?.error) {
-      throw new Error(parsed.message || parsed.error || parsed.data?.message || parsed.data?.error || 'GAS returned an error');
-    }
-    return parsed;
-  } catch (error) {
-    if (error instanceof SyntaxError) return { message: body };
-    throw error;
-  }
-}
-
-function isHistoryLogResponse(payload) {
-  if (Array.isArray(payload)) return true;
-  if (!payload || typeof payload !== 'object') return false;
-  return ['data', 'records', 'rows', 'historyLog', 'history_log', 'values'].some(key => Object.hasOwn(payload, key) && (Array.isArray(payload[key]) || isHistoryLogResponse(payload[key])));
-}
-
-function isHistoryRowConfirmed(remoteRow, payload) {
-  if (!remoteRow || String(remoteRow.id) !== String(payload.id)) return false;
-  const remoteTime = Date.parse(remoteRow.updated_at || '') || 0;
-  const submittedTime = Date.parse(payload.updated_at || '') || 0;
-  const fileWasSubmitted = Boolean(payload.fileData || payload.pendingFile);
-  return remoteTime >= submittedTime && (!fileWasSubmitted || Boolean(remoteRow.file_url));
-}
-
-function fetchHistoryLogJsonp(timeoutMs = 12000) {
-  return new Promise((resolve, reject) => {
-    const callbackName = `__trexHistoryCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const endpoint = new URL(GAS_WEB_APP_URL);
-    endpoint.searchParams.set('prefix', `window.${callbackName}`);
-    const script = document.createElement('script');
-    let timer;
-    const cleanup = () => {
-      window.clearTimeout(timer);
-      delete window[callbackName];
-      script.remove();
-    };
-    window[callbackName] = payload => {
-      cleanup();
-      if (payload?.success === false || payload?.error || !isHistoryLogResponse(payload)) {
-        reject(new Error(payload?.message || 'GAS GET endpoint did not return JSONP HistoryLog rows.'));
-        return;
-      }
-      resolve(extractHistoryRows(payload));
-    };
-    script.onerror = () => { cleanup(); reject(new Error('GAS JSONP request failed. Check Web App access and JSONP support.')); };
-    timer = window.setTimeout(() => { cleanup(); reject(new Error('GAS JSONP request timed out.')); }, timeoutMs);
-    script.async = true;
-    script.src = endpoint.toString();
-    document.head.appendChild(script);
-  });
-}
-
-async function fetchHistoryLogFromGas() {
-  let proxyError = null;
-  try {
-    const response = await fetch('/api/history', { method: 'GET', cache: 'no-store' });
-    const payload = await readGasResponse(response);
-    if (payload?.success === false || payload?.ok === false || payload?.error) throw new Error(payload.message || payload.error || 'GAS returned an error');
-    if (!isHistoryLogResponse(payload)) throw new Error('GAS GET response did not contain HistoryLog rows.');
-    return extractHistoryRows(payload);
-  } catch (error) {
-    proxyError = error;
-    console.warn('Same-origin GAS history proxy failed; trying direct GET/JSONP fallback:', error);
-  }
-  try {
-    const response = await fetch(GAS_WEB_APP_URL, { method: 'GET', cache: 'no-store', credentials: 'omit' });
-    const payload = await readGasResponse(response);
-    if (payload?.success === false || payload?.ok === false || payload?.error) throw new Error(payload.message || payload.error || 'GAS returned an error');
-    if (!isHistoryLogResponse(payload)) throw new Error('GAS GET response did not contain HistoryLog rows.');
-    return extractHistoryRows(payload);
-  } catch (fetchError) {
-    console.warn('Direct GAS GET failed; trying JSONP for the cross-origin response:', fetchError);
-    try { return await fetchHistoryLogJsonp(); }
-    catch (jsonpError) {
-      const detail = jsonpError?.message || fetchError?.message || 'Unknown connection error';
-      throw new Error(`Same-origin relay failed (${proxyError?.message || 'unavailable'}); direct GET failed (${fetchError?.message || 'CORS/network'}); JSONP fallback failed (${detail}).`);
-    }
-  }
-}
-
-async function postHistoryLogToGas(payload) {
-  const bodyRow = normalizeHistoryLogRow(payload);
-  const body = { ...bodyRow };
-  if (payload.fileData) {
-    body.fileData = payload.fileData;
-    body.fileName = payload.fileName || bodyRow.file_name;
-    body.mimeType = payload.mimeType || 'application/octet-stream';
-  }
-  const serializedBody = JSON.stringify(body);
-  const serializedBytes = new TextEncoder().encode(serializedBody).byteLength;
-  let response;
-  if (serializedBytes <= 3_500_000) {
-    try {
-      response = await fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: serializedBody,
-      });
-      if (response.status === 404) response = null;
-    } catch (proxyError) {
-      console.warn('Same-origin POST relay is unavailable; using the GAS opaque POST fallback:', proxyError);
-      response = null;
-    }
-  }
-  if (!response) {
-    // Large base64 uploads bypass the serverless body limit. GET through /api/history confirms the write.
-    response = await fetch(GAS_WEB_APP_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: serializedBody,
-    });
-  }
-  if (response.type === 'opaque') return { ...bodyRow, _needsReadBack: true };
-  const result = await readGasResponse(response);
-  const dataRecord = Array.isArray(result?.data) ? result.data.find(item => item && typeof item === 'object' && (String(item.id || item.doc_no) === String(bodyRow.id))) : result?.data;
-  const arrayRecord = Array.isArray(result) ? result.find(item => item && typeof item === 'object' && (String(item.id || item.doc_no) === String(bodyRow.id))) : null;
-  const nestedRecord = result?.record || result?.row || result?.data?.record || result?.data?.row;
-  const returned = result && typeof result === 'object' && !Array.isArray(result)
-    ? { ...result, ...(dataRecord && typeof dataRecord === 'object' ? dataRecord : {}), ...(nestedRecord && typeof nestedRecord === 'object' ? nestedRecord : {}) }
-    : arrayRecord;
-  const successToken = typeof result === 'string' ? result : `${result?.status || ''} ${result?.result || ''} ${result?.message || ''}`;
-  const acknowledged = result?.success === true || result?.success === 'true' || result?.ok === true || result?.ok === 'true' ||
-    /(^|\s)(success(?:ful(?:ly)?)?|ok|saved|updated|added)(\s|[.!]|$)/i.test(successToken) || Boolean(returned?.id || returned?.doc_no || returned?.file_url || returned?.fileUrl);
-  if (!acknowledged) throw new Error(result?.message || 'GAS did not confirm that the HistoryLog row was saved');
-  return normalizeHistoryLogRow({ ...bodyRow, ...(returned && typeof returned === 'object' ? returned : {}) });
 }
 
 function legacyInspectionsToHistory(records, rooms) {
@@ -631,20 +508,6 @@ function mergeInspectionRecords(rows, currentRecords, fallbackInspector = '') {
       riDocument: remote.riDocument ? { ...local?.riDocument, ...remote.riDocument } : local?.riDocument || null,
     };
   });
-}
-
-function historyRowToDocument(row) {
-  const rawType = String(row.doc_type || 'general').toLowerCase();
-  const documentType = rawType.includes('ri') || rawType.includes('request') ? 'ri' : rawType.includes('defect') ? 'defect' : rawType.includes('inspection') ? 'inspection' : 'general';
-  const building = canonicalBuilding(row.building, row.floor);
-  return {
-    id: row.id, name: row.file_name || row.doc_no || `Document ${row.id}`, reference: row.doc_no,
-    documentType, building, floor: String(row.floor || ''), roomNumber: String(row.room || ''),
-    category: ['Architecture', 'MEP', 'Structure'].includes(row.trade) ? row.trade : 'Architecture',
-    date: String(row.updated_at || '').slice(0, 10), scheduledDate: row.appointment_date || '',
-    status: String(row.status || 'pending').toLowerCase(), reasonReport: row.reason || '',
-    file_url: row.file_url || '', folder_path: row.folder_path || '', file_name: row.file_name || '',
-  };
 }
 
 function applyHistoryRowsToRooms(currentRooms, rows) {
@@ -694,68 +557,6 @@ async function storeInspectionEvidence(recordId, evidence) {
   });
 }
 
-async function savePendingHistoryPayload(recordId, payload) {
-  const db = await openEvidenceDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(EVIDENCE_STORE_NAME);
-    const request = store.get(recordId);
-    request.onsuccess = () => {
-      const previous = request.result || {};
-      const previousPayload = previous.pendingGasPayload || {};
-      const mergedPayload = { ...previousPayload, ...payload };
-      if (!payload.fileData && previousPayload.fileData) {
-        mergedPayload.fileData = previousPayload.fileData;
-        mergedPayload.fileName = payload.fileName || previousPayload.fileName || previousPayload.file_name;
-        mergedPayload.mimeType = previousPayload.mimeType || 'application/octet-stream';
-      }
-      if (!payload.pendingFile && !mergedPayload.fileData && previousPayload.pendingFile) mergedPayload.pendingFile = previousPayload.pendingFile;
-      store.put({ ...previous, id: recordId, pendingGasPayload: mergedPayload });
-    };
-    transaction.oncomplete = () => { db.close(); resolve(); };
-    transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not queue offline record')); };
-  });
-}
-
-async function readPendingHistoryPayload(recordId) {
-  const db = await openEvidenceDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readonly');
-    const request = transaction.objectStore(EVIDENCE_STORE_NAME).get(recordId);
-    request.onsuccess = () => { const payload = request.result?.pendingGasPayload || null; db.close(); resolve(payload); };
-    request.onerror = () => { const error = request.error; db.close(); reject(error || new Error('Could not read queued record')); };
-  });
-}
-
-async function clearPendingHistoryPayload(recordId) {
-  const db = await openEvidenceDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(EVIDENCE_STORE_NAME);
-    const request = store.get(recordId);
-    request.onsuccess = () => {
-      if (!request.result) return;
-      const value = { ...request.result };
-      delete value.pendingGasPayload;
-      if (value.photo || value.ri) store.put(value); else store.delete(recordId);
-    };
-    transaction.oncomplete = () => { db.close(); resolve(); };
-    transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not clear queued record')); };
-  });
-}
-
-function readPendingHistoryIds() {
-  try {
-    const value = JSON.parse(localStorage.getItem(HISTORY_LOG_PENDING_KEY) || '[]');
-    return Array.isArray(value) ? value.map(String) : [];
-  } catch { return []; }
-}
-
-function writePendingHistoryIds(ids) {
-  try { localStorage.setItem(HISTORY_LOG_PENDING_KEY, JSON.stringify([...new Set(ids.map(String))])); }
-  catch (error) { console.warn('Could not update pending HistoryLog index:', error); }
-}
-
 async function loadInspectionEvidence(recordId, kind) {
   const db = await openEvidenceDb();
   return new Promise((resolve, reject) => {
@@ -775,6 +576,7 @@ const generateRoomsData = () => {
     for (let r = 1; r <= 27; r++) {
       const roomNo = `${floor}${r < 10 ? '0' + r : r}`;
       const type = roomTypes[(floor + r) % roomTypes.length];
+      const building = floor <= 4 ? BUILDING_A : BUILDING_B;
       
       // Seed a believable construction sequence: lower floors are further along.
       const completedTasks = Math.max(0, Math.min(13, Math.round(1 + floor * 1.35 + ((r * 7 + floor * 3) % 7) - 3)));
@@ -797,8 +599,8 @@ const generateRoomsData = () => {
       else if (Object.values(tasksStatus).includes('defect')) overallStatus = 'defect';
 
       rooms.push({
-        id: roomNo,
-        building: floor <= 4 ? BUILDING_A : BUILDING_B,
+        id: `${building}-${roomNo}`,
+        building,
         roomNumber: roomNo,
         floor: floor,
         type: type,
@@ -811,11 +613,25 @@ const generateRoomsData = () => {
       });
     }
   }
-  return rooms;
+  // Both buildings use the complete eight-floor, 27-room template.
+  return BUILDING_VALUES.flatMap(building => rooms.map(room => ({ ...room, id: `${building}-${room.roomNumber}`, building })));
 };
 
+function completeRoomData(savedRooms) {
+  const defaults = generateRoomsData();
+  const savedByLocation = new Map(canonicalizeRooms(savedRooms).map(room => [`${canonicalBuilding(room.building, room.floor)}|${room.floor}|${room.roomNumber}`, room]));
+  return defaults.map(defaultRoom => {
+    const existing = savedByLocation.get(`${defaultRoom.building}|${defaultRoom.floor}|${defaultRoom.roomNumber}`);
+    return existing ? { ...defaultRoom, ...existing, id: defaultRoom.id, building: defaultRoom.building, tasks: Object.fromEntries(Object.entries(existing.tasks || {}).map(([task, status]) => [canonicalTask(task), status])) } : defaultRoom;
+  });
+}
+
 export default function App() {
-  const [lang, setLang] = useState('th');
+  const [lang, setLang] = useState(() => localStorage.getItem('trex-language') || 'th');
+  const [project, setProject] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('trex-project')) || PROJECT_OPTIONS[0]; }
+    catch { return PROJECT_OPTIONS[0]; }
+  });
   const [activeTab, setActiveTab] = useState('dashboard');
   const [session, setSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem('trex-session')) || null; }
@@ -823,7 +639,7 @@ export default function App() {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [rooms, setRooms] = useState(() => {
-    try { return canonicalizeRooms(JSON.parse(localStorage.getItem('trex-rooms')) || generateRoomsData()); }
+    try { const stored = JSON.parse(localStorage.getItem('trex-rooms')); return Array.isArray(stored) && stored.length ? completeRoomData(stored) : generateRoomsData(); }
     catch { return generateRoomsData(); }
   });
   const [historyRows, setHistoryRows] = useState(() => {
@@ -836,14 +652,13 @@ export default function App() {
   });
   const [inspectionRecords, setInspectionRecords] = useState(() => {
     const cached = readLocalHistoryRows();
-    if (cached.length) return historyRowsToInspections(cached);
-    try { return JSON.parse(localStorage.getItem('trex-inspections')) || []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem('trex-inspections')) || [];
+      const canonicalSaved = Array.isArray(saved) ? saved.map(record => ({ ...record, task: canonicalTask(record.task) })) : [];
+      return cached.length ? mergeInspectionRecords(cached, canonicalSaved) : canonicalSaved;
+    }
     catch { return []; }
   });
-  const [syncStatus, setSyncStatus] = useState('syncing');
-  const [syncError, setSyncError] = useState(false);
-  const [syncErrorReason, setSyncErrorReason] = useState('');
-  const [lastSyncedAt, setLastSyncedAt] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFloorFilter, setSelectedFloorFilter] = useState('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
@@ -855,6 +670,8 @@ export default function App() {
   const t = i18n[lang];
 
   useEffect(() => { localStorage.setItem('trex-rooms', JSON.stringify(rooms)); }, [rooms]);
+  useEffect(() => { localStorage.setItem('trex-language', lang); }, [lang]);
+  useEffect(() => { localStorage.setItem('trex-project', JSON.stringify(project)); }, [project]);
   useEffect(() => { localStorage.setItem('trex-inspections', JSON.stringify(inspectionRecords)); }, [inspectionRecords]);
   useEffect(() => {
     try { localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(historyRows.map(normalizeHistoryLogRow))); }
@@ -867,8 +684,9 @@ export default function App() {
   };
 
   const handleLogin = (user) => {
+    setProject(user.project || PROJECT_OPTIONS[0]);
     setSession(user);
-    localStorage.setItem('trex-session', JSON.stringify(user));
+    localStorage.setItem('trex-session', JSON.stringify({ ...user, project: user.project || PROJECT_OPTIONS[0] }));
     setActiveTab('dashboard');
   };
   const handleLogout = () => {
@@ -878,184 +696,39 @@ export default function App() {
     setMobileMenuOpen(false);
   };
 
-  const refreshHistory = useCallback(async (allowPendingWrites = session?.role === 'engineer') => {
-    setSyncStatus('syncing');
-    setSyncError(false);
-    setSyncErrorReason('');
-    let remoteRows = [];
-    let readFailed = false;
-    let lastSyncError = '';
-    try { remoteRows = await fetchHistoryLogFromGas(); }
-    catch (error) {
-      readFailed = true;
-      lastSyncError = error?.message || String(error);
-      console.error('Could not read HistoryLog from GAS; continuing with cache and queued writes:', error);
-    }
-
-    let pendingIds = readPendingHistoryIds();
-    if (allowPendingWrites && session?.role === 'engineer' && pendingIds.length) {
-      const remaining = [];
-      for (const id of pendingIds) {
-        try {
-          const payload = await readPendingHistoryPayload(id);
-          if (!payload) { await clearPendingHistoryPayload(id); continue; }
-          const remoteMatch = remoteRows.find(row => String(row.id) === String(id));
-          const remoteTime = Date.parse(remoteMatch?.updated_at || '') || 0;
-          const queuedTime = Date.parse(payload.updated_at || '') || 0;
-          const queuedHasFile = Boolean(payload.fileData || payload.pendingFile);
-          if (remoteMatch && remoteTime >= queuedTime && (!queuedHasFile || remoteMatch.file_url)) {
-            await clearPendingHistoryPayload(id);
-            continue;
-          }
-          let retryPayload = payload;
-          if (payload.pendingFile) {
-            const { pendingFile, ...metadata } = payload;
-            retryPayload = payload.fileData ? metadata : { ...metadata, fileData: await fileToBase64(pendingFile), fileName: metadata.fileName || metadata.file_name, mimeType: pendingFile.type || 'application/octet-stream' };
-          }
-          const saved = await postHistoryLogToGas(retryPayload);
-          remoteRows = mergeHistoryRows([saved], remoteRows);
-          if (saved._needsReadBack) {
-            const confirmRows = await fetchHistoryLogFromGas();
-            const confirmed = confirmRows.find(item => String(item.id) === String(id));
-            if (!confirmed || !isHistoryRowConfirmed(confirmed, retryPayload)) throw new Error('GAS accepted an unreadable POST but GET could not confirm the row and file link.');
-            remoteRows = mergeHistoryRows([confirmed], remoteRows);
-            readFailed = false;
-          }
-          await clearPendingHistoryPayload(id);
-        } catch (retryError) {
-          lastSyncError = retryError?.message || String(retryError);
-          console.error(`Queued HistoryLog row ${id} could not be synced:`, retryError);
-          remaining.push(id);
-        }
-      }
-      pendingIds = remaining;
-      writePendingHistoryIds(remaining);
-      if (readFailed && remoteRows.length) {
-        try { remoteRows = mergeHistoryRows(await fetchHistoryLogFromGas(), remoteRows); readFailed = false; }
-        catch (error) { lastSyncError = error?.message || String(error); console.error('GAS accepted queued writes but the confirming read failed:', error); }
-      }
-    }
-
-    const merged = persistHistoryRowsCache(mergeHistoryRows(remoteRows, readLocalHistoryRows()));
-    setHistoryRows(merged);
-    setInspectionRecords(current => mergeInspectionRecords(merged, current, session?.name || ''));
-    setRooms(current => applyHistoryRowsToRooms(current, merged));
-    const failed = pendingIds.length > 0 || readFailed;
-    setSyncStatus(failed ? 'offline' : 'synced');
-    setSyncError(failed);
-    setSyncErrorReason(failed ? (lastSyncError || '') : '');
-    if (!readFailed) setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
-    return merged;
-  }, [session, lang]);
-
-  useEffect(() => {
-    if (session) refreshHistory(session.role === 'engineer');
-  }, [session, refreshHistory]);
-
   const persistHistoryRecord = useCallback(async (inputRow, file = null) => {
     if (session?.role !== 'engineer') return null;
-    if (file && file.size > MAX_UPLOAD_BYTES) {
-      showToast(i18n[lang].sync.fileTooLarge);
-      return null;
-    }
-    let row = normalizeHistoryLogRow(inputRow);
+    if (file && file.size > MAX_UPLOAD_BYTES) { showToast(i18n[lang].storage.fileTooLarge); return null; }
+    const row = normalizeHistoryLogRow(inputRow);
+    const localRow = { ...row, file_name: file ? buildDriveFileName(row.building, row.floor, row.room, row.doc_no, file.name) : row.file_name, file_url: row.file_url || '', folder_path: row.folder_path || (row.building + '/' + row.floor + '/' + row.room) };
     if (file) {
-      const fileName = buildDriveFileName(row.building, row.floor, row.room, row.doc_no, file.name);
-      row = normalizeHistoryLogRow({ ...row, file_name: fileName });
+      try { await storeInspectionEvidence(row.id, { photo: file, ri: null }); }
+      catch (error) { console.error('Local file storage failed:', error); showToast(lang === 'th' ? 'บันทึกไฟล์ในอุปกรณ์ไม่สำเร็จ' : 'Could not save the file on this device'); throw error; }
     }
-    let payload = { ...row };
-    const cached = mergeHistoryRows([row], readLocalHistoryRows());
-    setHistoryRows(cached);
-    try { localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(cached)); }
-    catch (error) { console.warn('Could not persist HistoryLog cache:', error); }
-    try {
-      if (file) {
-        payload = { ...row, fileData: await fileToBase64(file), fileName: row.file_name, mimeType: file.type || 'application/octet-stream' };
-      }
-      setSyncStatus('syncing');
-      setSyncError(false);
-      setSyncErrorReason('');
-      const savedRow = await postHistoryLogToGas(payload);
-      let latestRows = [savedRow];
-      let readBackFailed = false;
-      if (savedRow._needsReadBack) {
-        const responseRows = await fetchHistoryLogFromGas();
-        const confirmed = responseRows.find(item => String(item.id) === String(row.id));
-        if (!confirmed || !isHistoryRowConfirmed(confirmed, payload)) throw new Error('GAS POST was sent but the follow-up GET did not confirm that the row and file were saved.');
-        latestRows = mergeHistoryRows([confirmed], responseRows);
-      }
-      try { await clearPendingHistoryPayload(row.id); }
-      catch (queueError) { console.error('Backend accepted the HistoryLog row, but its local queue entry could not be cleared yet:', queueError); }
-      writePendingHistoryIds(readPendingHistoryIds().filter(id => String(id) !== String(row.id)));
-      if (!savedRow._needsReadBack) {
-        try {
-          const responseRows = await fetchHistoryLogFromGas();
-          if (responseRows.length) latestRows = mergeHistoryRows([savedRow], responseRows);
-        } catch (refreshError) {
-          readBackFailed = true;
-          setSyncErrorReason(refreshError?.message || String(refreshError));
-          console.error('POST succeeded, but the follow-up HistoryLog refresh failed; retaining the returned record:', refreshError);
-        }
-      }
-      const updatedRows = persistHistoryRowsCache(mergeHistoryRows(latestRows, cached));
-      setHistoryRows(updatedRows);
-      setInspectionRecords(current => mergeInspectionRecords(updatedRows, current, session.name));
-      if (String(row.doc_type).toLowerCase().startsWith('inspection')) setRooms(current => applyHistoryRowsToRooms(current, updatedRows));
-      const hasPendingWrites = readPendingHistoryIds().length > 0;
-      const needsAttention = hasPendingWrites || readBackFailed;
-      setSyncStatus(needsAttention ? 'offline' : 'synced');
-      setSyncError(needsAttention);
-      if (!needsAttention) setSyncErrorReason('');
-      if (!needsAttention) setLastSyncedAt(new Date().toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
-      return { ...savedRow, _savedToBackend: true };
-    } catch (error) {
-      console.warn('GAS write failed; retaining the local HistoryLog row:', error);
-      try {
-        await savePendingHistoryPayload(row.id, file && !payload.fileData ? { ...payload, pendingFile: file } : payload);
-        writePendingHistoryIds([...readPendingHistoryIds(), row.id]);
-      } catch (queueError) {
-        console.warn('Could not queue the record for a later sync:', queueError);
-      }
-      setSyncStatus('offline');
-      setSyncError(true);
-      setSyncErrorReason(error?.message || String(error));
-      return { ...row, _savedToBackend: false };
-    }
+    const updatedRows = persistHistoryRowsCache(mergeHistoryRows([localRow], readLocalHistoryRows()));
+    setHistoryRows(updatedRows);
+    setInspectionRecords(current => mergeInspectionRecords(updatedRows, current, session.name));
+    if (String(row.doc_type).toLowerCase().startsWith('inspection')) setRooms(current => applyHistoryRowsToRooms(current, updatedRows));
+    return { ...localRow, _savedLocally: true };
   }, [session, lang]);
 
   const submitInspection = useCallback(async (record, evidence) => {
     if (session?.role !== 'engineer') return;
     try { await storeInspectionEvidence(record.id, evidence); }
-    catch (error) {
-      console.error('Unable to persist inspection evidence locally:', error);
-      showToast(i18n[lang].sync.uploadFailed);
-    }
-    const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber));
-    const building = canonicalBuilding(room?.building || PROJECT_BUILDING_NAME, room?.floor);
-    const base = {
-      building, floor: room?.floor || '', room: record.roomNumber, trade: record.task,
-      docNo: `INS-${record.id}`, docType: 'inspection', status: record.status,
-      reason: record.remarks || '', updatedAt: new Date().toISOString(),
-    };
-    const primaryRow = toHistoryLogRow({ ...base, id: record.id, fileName: evidence?.photo?.name || '', fileUrl: record.photo?.url || '' });
-    const localRecord = { ...record };
-    setInspectionRecords(current => [localRecord, ...current]);
+    catch (error) { console.error('Unable to persist inspection evidence locally:', error); showToast(lang === 'th' ? 'บันทึกหลักฐานในอุปกรณ์ไม่สำเร็จ' : 'Could not save evidence on this device'); }
+    const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber) && String(item.floor) === String(record.floor) && canonicalBuilding(item.building, item.floor) === canonicalBuilding(record.building, record.floor));
+    const base = { building: canonicalBuilding(record.building || room?.building || PROJECT_BUILDING_NAME, record.floor || room?.floor), floor: record.floor || room?.floor || '', room: record.roomNumber, trade: record.task, docNo: 'INS-' + record.id, docType: 'inspection', status: record.status, reason: record.remarks || '', updatedAt: new Date().toISOString() };
+    setInspectionRecords(current => [record, ...current]);
     setRooms(current => current.map(currentRoom => {
-      if (String(currentRoom.roomNumber) !== String(record.roomNumber)) return currentRoom;
+      if (String(currentRoom.roomNumber) !== String(record.roomNumber) || String(currentRoom.floor) !== String(base.floor) || canonicalBuilding(currentRoom.building, currentRoom.floor) !== base.building) return currentRoom;
       const tasks = { ...currentRoom.tasks, [record.task]: record.status };
       const passed = Object.values(tasks).filter(value => value === 'passed').length;
       const defects = Object.values(tasks).filter(value => value === 'defect').length;
       return { ...currentRoom, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects, status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: record.date, lastInspector: record.inspector };
     }));
-    const savedPhoto = await persistHistoryRecord(primaryRow, evidence?.photo || null);
-    let savedRi = null;
-    if (evidence?.ri) {
-      const riRow = toHistoryLogRow({ ...base, id: `${record.id}-ri`, docNo: `RI-${record.id}`, docType: 'ri', fileName: evidence.ri.name });
-      savedRi = await persistHistoryRecord(riRow, evidence.ri);
-    }
-    const success = savedPhoto?._savedToBackend && (!evidence?.ri || savedRi?._savedToBackend);
-    if (success) showToast(lang === 'th' ? `บันทึกผลตรวจห้อง ${record.roomNumber} สำเร็จ` : `Saved inspection for Room ${record.roomNumber}`, savedPhoto?.file_url || savedRi?.file_url || '');
-    else showToast(i18n[lang].sync.uploadFailed);
+    await persistHistoryRecord(toHistoryLogRow({ ...base, id: record.id, fileName: evidence?.photo?.name || '' }), evidence?.photo || null);
+    if (evidence?.ri) await persistHistoryRecord(toHistoryLogRow({ ...base, id: record.id + '-ri', docNo: 'RI-' + record.id, docType: 'ri', fileName: evidence.ri.name }), evidence.ri);
+    showToast(lang === 'th' ? 'บันทึกผลตรวจห้อง ' + record.roomNumber + ' ในเครื่องแล้ว' : 'Inspection for room ' + record.roomNumber + ' saved on this device');
   }, [session, rooms, persistHistoryRecord, lang]);
 
   // KPI Computations
@@ -1121,10 +794,10 @@ export default function App() {
         <div className="mx-4 my-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700/60">
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
             <Building2 className="w-4 h-4" />
-            <span>{t.projectTitle}</span>
+            <span>{project.name}</span>
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-            <span>8 Floors • 216 Rooms</span>
+            <span>{lang === 'th' ? '8 ชั้น • 432 ห้อง' : '8 Floors • 432 Rooms'}</span>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
         </div>
@@ -1193,11 +866,7 @@ export default function App() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="max-w-36 text-right sm:max-w-52"><p className="hidden truncate text-[10px] text-slate-400 md:block">{session.name}</p><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300">{session.role === 'engineer' ? t.role.engineer : t.role.viewer}</span></div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-1.5" title={syncError ? t.sync.syncFailed : syncStatus === 'synced' && lastSyncedAt ? `${t.sync.lastSync}: ${lastSyncedAt}` : undefined}>
-              <span className={`h-2 w-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-400' : syncStatus === 'syncing' ? 'animate-pulse bg-amber-300' : 'bg-red-400'}`} />
-              <span className="hidden text-[9px] font-medium text-slate-300 lg:inline">{syncStatus === 'synced' ? t.sync.synced : syncStatus === 'syncing' ? t.sync.syncing : t.sync.offline}</span>
-            </div>
-            <button type="button" disabled={syncStatus === 'syncing'} onClick={() => refreshHistory(isEngineer)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50 sm:px-3" title={t.sync.refresh} aria-label={t.sync.refresh}><RefreshCw className={`h-4 w-4 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} /><span className="hidden xl:inline">{t.sync.refresh}</span></button>
+            <span className="hidden rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-1.5 text-[9px] font-medium text-slate-400 md:inline">{lang === 'th' ? 'บันทึกในอุปกรณ์' : 'Saved locally'}</span>
             {/* Language Switcher Button */}
             <button
               onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
@@ -1222,15 +891,18 @@ export default function App() {
 
         {/* View Content Renderer */}
         <main className="flex-1 overflow-y-auto bg-[#0B132B] p-3 sm:p-6">
-          {syncError && <div role="alert" className="mb-4 space-y-1 rounded-lg border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"><p className="font-semibold">{t.sync.syncFailed}</p>{syncErrorReason && <p className="break-words text-[11px] text-amber-100">{syncErrorReason}</p>}<p className="text-[11px] text-amber-100/80">{t.sync.connectionGuide}</p></div>}
           {activeTab === 'dashboard' && (
             <DashboardView 
               t={t} 
+              lang={lang}
               stats={stats} 
               rooms={rooms}
               visibleRooms={filteredRooms}
               onInspectRoom={(r) => setModalRoom(r)} 
               setSelectedStatusFilter={setSelectedStatusFilter}
+              selectedFloor={selectedFloorFilter}
+              setSelectedFloor={setSelectedFloorFilter}
+              projectName={project.name}
             />
           )}
 
@@ -1252,11 +924,11 @@ export default function App() {
           )}
 
           {activeTab === 'inspectionRecords' && (
-            <InspectionRecordsView t={t} rooms={rooms} records={inspectionRecords} historyRows={historyRows} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />
+            <InspectionRecordsView t={t} lang={lang} rooms={rooms} records={inspectionRecords} onInspectRoom={(r) => setModalRoom(r)} />
           )}
 
           {activeTab === 'documentCenter' && (
-            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} canEdit={isEngineer} userName={session.name} historyRows={historyRows} onRecordSaved={persistHistoryRecord} />
+            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} canEdit={isEngineer} userName={session.name} onRecordSaved={persistHistoryRecord} />
           )}
 
           {activeTab === 'aiAssistant' && (
@@ -1267,7 +939,7 @@ export default function App() {
       </div>
 
       {/* --- GLOBAL ROOM INSPECTION MODAL --- */}
-      {modalRoom && <RoomDetailModal room={modalRoom} t={t} records={inspectionRecords} showToast={showToast} onClose={() => setModalRoom(null)} />}
+      {modalRoom && <RoomDetailModal room={modalRoom} t={t} lang={lang} records={inspectionRecords} showToast={showToast} onClose={() => setModalRoom(null)} />}
     </div>
     </LocalizedUI>
   );
@@ -1279,11 +951,15 @@ export default function App() {
 function LoginScreen({ lang, t, setLang, onLogin }) {
   const [name, setName] = useState('');
   const [role, setRole] = useState('engineer');
+  const [project, setProject] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('trex-project'))?.id || PROJECT_OPTIONS[0].id; }
+    catch { return PROJECT_OPTIONS[0].id; }
+  });
   const submit = event => {
     event.preventDefault();
     const cleanName = name.trim();
     if (!cleanName) return;
-    onLogin({ name: cleanName, role });
+    onLogin({ name: cleanName, role, project: PROJECT_OPTIONS.find(item => item.id === project) || PROJECT_OPTIONS[0] });
   };
   return <main className="flex min-h-screen items-center justify-center bg-[#0B132B] p-4 text-slate-100 sm:p-6">
     <section className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-800/90 shadow-2xl">
@@ -1293,6 +969,7 @@ function LoginScreen({ lang, t, setLang, onLogin }) {
       </div>
       <form onSubmit={submit} className="space-y-5 p-5 sm:p-6">
         <div><h2 className="text-xl font-bold">{t.auth.title}</h2><p className="mt-1 text-xs text-slate-400">{t.subTitle}</p></div>
+        <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-300">{t.auth.project}</span><select value={project} onChange={event => setProject(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-3 text-sm text-slate-100">{PROJECT_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
         <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-300">{t.auth.name}</span><input autoComplete="name" required value={name} onChange={event => setName(event.target.value)} placeholder={t.auth.namePlaceholder} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none" /></label>
         <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-slate-300">{t.auth.role}</legend>
           <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${role === 'engineer' ? 'border-emerald-500 bg-emerald-950/30' : 'border-slate-700 bg-slate-900/60'}`}><input type="radio" name="role" value="engineer" checked={role === 'engineer'} onChange={() => setRole('engineer')} className="mt-1 accent-emerald-500" /><span><b className="block text-sm text-slate-100">{t.auth.engineer}</b><small className="mt-1 block text-xs leading-relaxed text-slate-400">{t.auth.engineerAccess}</small></span></label>
@@ -1307,8 +984,9 @@ function LoginScreen({ lang, t, setLang, onLogin }) {
 // ==========================================
 // MODULE 1: DASHBOARD VIEW
 // ==========================================
-function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelectedStatusFilter }) {
+function DashboardView({ t, lang, stats, rooms, visibleRooms, onInspectRoom, setSelectedStatusFilter, selectedFloor, setSelectedFloor, projectName }) {
   const [chartMode, setChartMode] = useState('floor');
+  const roomList = selectedFloor === 'all' ? visibleRooms : visibleRooms.filter(room => String(room.floor) === String(selectedFloor));
   const floors = [1, 2, 3, 4, 5, 6, 7, 8];
   const statusCounts = [
     { key: 'defect', label: t.dashboard.legend.failed, value: stats.defect, color: '#ef3340' },
@@ -1329,7 +1007,7 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
   return (
     <div className="-m-3 min-h-full space-y-4 bg-[#0B132B] p-3 text-slate-100 sm:-m-6 sm:p-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="m-0 text-xl font-bold tracking-normal text-slate-100">{t.dashboard.title}</h1><p className="mt-1 text-xs text-slate-400">{t.dashboard.projectSubtitle}</p></div>
+        <div><h1 className="m-0 text-xl font-bold tracking-normal text-slate-100">{t.dashboard.title}</h1><p className="mt-1 text-xs text-slate-400">{projectName} · {lang === 'th' ? 'โครงการก่อสร้าง' : 'Construction Project'}</p></div>
         <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">● {t.dashboard.liveSync}</span>
       </header>
 
@@ -1370,7 +1048,7 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
               <line x1="48" x2="748" y1="155" y2="155" stroke="#9aa3af"/>
             </svg></div>
             <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-2 text-[10px]">{statusCounts.map(item => <span key={item.key} className="inline-flex items-center gap-1.5 text-slate-300"><i className="h-2 w-2 rounded-sm" style={{ background: item.color }} />{item.label}</span>)}</div>
-          </> : <div className="grid grid-cols-2 gap-3 py-4 sm:grid-cols-4">{TASKS_13.slice(0, 4).map(task => { const count = rooms.reduce((sum, room) => sum + (room.tasks?.[task] === 'defect' ? 1 : 0), 0); return <div key={task} className="rounded-md border border-slate-700 bg-[#111b34] p-3"><div className="text-xs text-slate-300">{task}</div><div className="mt-2 text-lg font-bold text-rose-400">{count} {t.dashboard.failed}</div></div>; })}</div>}
+          </> : <div className="grid grid-cols-2 gap-3 py-4 sm:grid-cols-4">{TASKS_13.slice(0, 4).map(task => { const count = rooms.reduce((sum, room) => sum + (room.tasks?.[task] === 'defect' ? 1 : 0), 0); return <div key={task} className="rounded-md border border-slate-700 bg-[#111b34] p-3"><div className="text-xs text-slate-300">{taskLabel(task, lang)}</div><div className="mt-2 text-lg font-bold text-rose-400">{count} {t.dashboard.failed}</div></div>; })}</div>}
           <div className="mt-3 flex justify-end gap-1"><button onClick={() => setChartMode('floor')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'floor' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Floor Status</button><button onClick={() => setChartMode('trade')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'trade' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Trade Defects</button></div>
         </div>
 
@@ -1385,15 +1063,15 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-100"><AlertTriangle className="h-4 w-4 text-rose-400" />{t.dashboard.criticalRooms}</h2>
         {criticalRooms.length ? <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">{criticalRooms.map((room, index) => {
           const task = TASKS_13.find(name => room.tasks?.[name] === 'defect');
-          return <button key={room.id} onClick={() => onInspectRoom(room)} className="flex items-center gap-2 rounded-md border border-rose-900/70 bg-rose-950/30 p-2 text-left transition hover:border-rose-700"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-rose-600 text-[10px] font-bold text-white">{room.roomNumber}</span><span className="min-w-0"><b className="block text-[10px] text-slate-100">{t.dashboard.room} {room.roomNumber}</b><small className="block truncate text-[9px] text-rose-300">{t.dashboard.defects[index % t.dashboard.defects.length]}{task ? ` · ${task}` : ''}</small></span></button>;
+          return <button key={room.id} onClick={() => onInspectRoom(room)} className="flex items-center gap-2 rounded-md border border-rose-900/70 bg-rose-950/30 p-2 text-left transition hover:border-rose-700"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-rose-600 text-[10px] font-bold text-white">{room.roomNumber}</span><span className="min-w-0"><b className="block text-[10px] text-slate-100">{t.dashboard.room} {room.roomNumber}</b><small className="block truncate text-[9px] text-rose-300">{t.dashboard.defects[index % t.dashboard.defects.length]}{task ? ` · ${taskLabel(task, lang)}` : ''}</small></span></button>;
         })}</div> : <p className="text-xs text-slate-500">{t.dashboard.failed}: 0</p>}
       </section>
 
       {/* Preserve the existing quick inspection list below the reference dashboard panels. */}
       <div className="overflow-hidden rounded-lg border border-slate-700 bg-[#1C2541] shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-700/80 p-4">
-          <h3 className="text-sm font-semibold text-slate-100">รายชื่อห้องพัก (Room Inspection List)</h3>
-          <span className="text-xs text-slate-400">แสดงผล {visibleRooms.length} ห้อง</span>
+          <h3 className="text-sm font-semibold text-slate-100">{lang === 'th' ? 'รายการตรวจห้องพัก' : 'Room Inspection List'}</h3>
+          <div className="flex flex-wrap items-center justify-end gap-2"><label className="flex items-center gap-2 text-[10px] text-slate-300"><span>{lang === 'th' ? 'ชั้น' : 'Floor'}</span><select value={selectedFloor} onChange={event => setSelectedFloor(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกชั้น' : 'All Floors'}</option>{FLOORS.map(floor => <option key={floor} value={String(floor)}>{lang === 'th' ? `ชั้น ${floor}` : `Floor ${floor}`}</option>)}</select></label><span className="text-xs text-slate-400">{lang === 'th' ? `แสดงผล ${roomList.length} ห้อง` : `Showing ${roomList.length} rooms`}</span></div>
         </div>
         <div className="overflow-x-auto max-h-96">
           <table className="w-full text-left border-collapse">
@@ -1408,9 +1086,9 @@ function DashboardView({ t, stats, rooms, visibleRooms, onInspectRoom, setSelect
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/70 text-xs text-slate-300">
-              {visibleRooms.slice(0, 15).map(room => (
+              {roomList.slice(0, 15).map(room => (
                 <tr key={room.id} className="transition-colors hover:bg-slate-700/50">
-                  <td className="p-3 pl-4 font-bold text-emerald-300">{room.roomNumber}</td>
+                  <td className="p-3 pl-4 font-bold text-emerald-300">{room.roomNumber}<small className="ml-2 text-[9px] font-medium text-slate-500">{room.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA}</small></td>
                   <td className="p-3">{room.type}</td>
                   <td className="p-3">ชั้น {room.floor}</td>
                   <td className="p-3">
@@ -1544,7 +1222,7 @@ function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, selectedSt
 function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection }) {
   const labels = i18n[lang].form;
   const taskOptions = lang === 'th' ? TASKS_13_TH : TASKS_13;
-  const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.roomNumber || '101');
+  const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.id || '101');
   const [taskName, setTaskName] = useState(TASKS_13[0]);
   const [status, setStatus] = useState('passed');
   const [inspectorName, setInspectorName] = useState('');
@@ -1555,14 +1233,31 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
   const [photoFile, setPhotoFile] = useState(null);
   const [aiScore, setAiScore] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [riFile, setRiFile] = useState(null);
-  const [riVerification, setRiVerification] = useState('');
+  const [riDocuments] = useState(() => { try { return (JSON.parse(localStorage.getItem('trex-documents') || '[]') || []).filter(doc => doc.documentType === 'ri'); } catch { return []; } });
+  const [selectedRiId, setSelectedRiId] = useState('');
+  const [riPreviewUrl, setRiPreviewUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectedRoomInfo = rooms.find(room => String(room.id) === String(selectedRoom)) || rooms[0];
+  const selectedRiDocument = riDocuments.find(doc => String(doc.id) === String(selectedRiId));
+  useEffect(() => () => { if (riPreviewUrl) URL.revokeObjectURL(riPreviewUrl); }, [riPreviewUrl]);
+  const previewRiDocument = async () => {
+    if (!selectedRiDocument) return;
+    if (selectedRiDocument.file_url) { window.open(selectedRiDocument.file_url, '_blank', 'noopener,noreferrer'); return; }
+    try {
+      const blob = await loadInspectionEvidence(selectedRiDocument.id, 'photo');
+      if (!blob) throw new Error('RI document file is not available in local storage');
+      if (riPreviewUrl) URL.revokeObjectURL(riPreviewUrl);
+      setRiPreviewUrl(URL.createObjectURL(blob));
+    } catch (error) {
+      console.error('Could not preview saved RI document:', error);
+      showToast(lang === 'th' ? 'ไม่พบไฟล์เอกสาร RI ในอุปกรณ์นี้' : 'RI document file is not available on this device');
+    }
+  };
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files[0];
     if (file && file.size > MAX_UPLOAD_BYTES) {
-      showToast(t.sync.fileTooLarge);
+      showToast(t.storage.fileTooLarge);
       e.target.value = '';
       return;
     }
@@ -1581,24 +1276,6 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
     }
   };
 
-  const handleRiUpload = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_UPLOAD_BYTES) {
-      showToast(t.sync.fileTooLarge);
-      event.target.value = '';
-      return;
-    }
-    setRiFile(file);
-    setRiVerification('checking');
-    window.setTimeout(() => {
-      const supported = file.size > 0 && /application\/pdf|image\/(png|jpeg)/.test(file.type);
-      const filenameIdentifiesRi = /\bri\b|request.?for.?inspection/i.test(file.name);
-      setRiVerification(!supported ? 'simulated-fail' : filenameIdentifiesRi ? 'simulated-pass' : 'simulated-review');
-    }, 900);
-    event.target.value = '';
-  };
-
   const handleVoiceRecord = () => {
     setIsRecording(true);
     setTimeout(() => {
@@ -1614,14 +1291,13 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
     const id = crypto.randomUUID();
     setIsSubmitting(true);
     try {
-      await onSubmitInspection({ id, roomNumber: selectedRoom, task: taskName, status, remarks, date: new Date().toLocaleString(lang === 'th' ? 'th-TH' : 'en-US'), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: riFile ? { name: riFile.name, type: riFile.type, size: riFile.size, verification: riVerification } : null }, { photo: photoFile, ri: riFile });
+      await onSubmitInspection({ id, roomNumber: selectedRoomInfo?.roomNumber, building: selectedRoomInfo?.building, floor: selectedRoomInfo?.floor, task: taskName, status, remarks, date: new Date().toISOString(), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: selectedRiDocument ? { id: selectedRiDocument.id, name: selectedRiDocument.file_name || selectedRiDocument.name, type: 'application/pdf', file_url: selectedRiDocument.file_url || '', folder_path: selectedRiDocument.folder_path || '', document_id: selectedRiDocument.id } : null }, { photo: photoFile });
     setRemarks('');
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
     setPhotoFile(null);
     setAiScore(null);
-    setRiFile(null);
-    setRiVerification('');
+    setSelectedRiId('');
     } finally {
       setIsSubmitting(false);
     }
@@ -1644,7 +1320,7 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             >
               {rooms.map(r => (
-                <option key={r.id} value={r.roomNumber}>{labels.roomOption(r.roomNumber, r.floor, lang === 'th' ? (r.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA) : (r.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA))}</option>
+                <option key={r.id} value={r.id}>{labels.roomOption(r.roomNumber, r.floor, r.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA)}</option>
               ))}
             </select>
           </div>
@@ -1707,16 +1383,9 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
         </div>
 
         <div className="rounded-xl border border-dashed border-slate-600 bg-slate-900/40 p-4">
-          <label htmlFor="ri-document" className="mb-2 block text-xs font-semibold text-slate-200">RI (Request for Inspection) Document</label>
-          <input id="ri-document" type="file" accept="application/pdf,image/png,image/jpeg" onChange={handleRiUpload} className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white" />
-          <p className="mt-2 text-[10px] text-amber-300">Simulated AI verification checks file format and metadata only; it cannot confirm issuer authenticity.</p>
-          {riFile && <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-300">{riFile.name}</span>
-            {riVerification === 'checking' && <span className="rounded-full bg-blue-500/20 px-2.5 py-1 font-semibold text-blue-300">Checking…</span>}
-            {riVerification === 'simulated-pass' && <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 font-semibold text-emerald-300">Simulated AI: likely genuine RI · demo only</span>}
-            {riVerification === 'simulated-review' && <span className="rounded-full bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-300">Review required · filename does not identify an RI · simulation</span>}
-            {riVerification === 'simulated-fail' && <span className="rounded-full bg-red-500/20 px-2.5 py-1 font-semibold text-red-300">Verification failed · unsupported file · simulation</span>}
-          </div>}
+          <label htmlFor="ri-document-select" className="mb-2 block text-xs font-semibold text-slate-200">{lang === 'th' ? 'เลือกเอกสาร RI จากศูนย์เอกสารโครงการ' : 'Select RI Document from Project Document Hub'}</label>
+          <select id="ri-document-select" value={selectedRiId} onChange={event => setSelectedRiId(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="">{lang === 'th' ? 'ไม่แนบเอกสาร RI' : 'No RI document attached'}</option>{[...riDocuments].sort((a, b) => Number(String(b.building) === selectedRoomInfo?.building && String(b.floor) === String(selectedRoomInfo?.floor) && String(b.roomNumber) === String(selectedRoomInfo?.roomNumber)) - Number(String(a.building) === selectedRoomInfo?.building && String(a.floor) === String(selectedRoomInfo?.floor) && String(a.roomNumber) === String(selectedRoomInfo?.roomNumber))).map(doc => <option key={doc.id} value={doc.id}>{`${doc.reference || doc.doc_no || 'RI'} · ${doc.file_name || doc.name} · ${doc.building} / ${lang === 'th' ? 'ชั้น' : 'Floor'} ${doc.floor} / ${lang === 'th' ? 'ห้อง' : 'Room'} ${doc.roomNumber || doc.room} · ${doc.scheduledDate || '—'}`}</option>)}</select>
+          {selectedRiDocument && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800 p-3 text-xs"><span className="min-w-0 break-all text-slate-300">{selectedRiDocument.file_name || selectedRiDocument.name} · {selectedRiDocument.scheduledDate || '—'}</span><button type="button" onClick={previewRiDocument} className="rounded-md bg-sky-700 px-3 py-2 font-semibold text-white">{lang === 'th' ? 'ดูเอกสาร RI' : 'View RI Document'}</button></div>}
         </div>
 
         {/* Voice Note & Remarks */}
@@ -1749,9 +1418,10 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
           disabled={isSubmitting}
           className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg text-sm"
         >
-          {isSubmitting ? i18n[lang].sync.uploading : labels.submit}
+          {isSubmitting ? i18n[lang].storage.saving : labels.submit}
         </button>
       </form>
+      {riPreviewUrl && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-3" onClick={() => setRiPreviewUrl('')}><div className="w-full max-w-4xl overflow-hidden rounded-xl border border-slate-600 bg-slate-900" onClick={event => event.stopPropagation()}><div className="flex items-center justify-between p-3 text-sm font-semibold text-white"><span>{selectedRiDocument?.name}</span><button type="button" onClick={() => setRiPreviewUrl('')}><X className="h-4 w-4" /></button></div><iframe title={selectedRiDocument?.name || 'RI Document'} src={riPreviewUrl} className="h-[75vh] w-full bg-white" /></div></div>}
     </div>
   );
 }
@@ -1759,8 +1429,31 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
 // ==========================================
 // MODULE 4: 13-TASK INSPECTION RECORDS
 // ==========================================
-function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
+function InspectionRecordsView({ t, lang, rooms, records, onInspectRoom }) {
   const labels = t.records;
+  const [dateMode, setDateMode] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedBuilding, setSelectedBuilding] = useState('all');
+  const [selectedFloor, setSelectedFloor] = useState('all');
+  const [selectedRoom, setSelectedRoom] = useState('all');
+  const [reportDate, setReportDate] = useState(getLocalDateString());
+  const [reportWeek, setReportWeek] = useState(() => { const d = new Date(); const first = new Date(d.getFullYear(), 0, 1); return `${d.getFullYear()}-W${String(Math.ceil((((d - first) / 86400000) + first.getDay() + 1) / 7)).padStart(2, '0')}`; });
+  const weekRange = (weekValue) => {
+    const [year, week] = weekValue.split('-W').map(Number);
+    const jan4 = new Date(year, 0, 4);
+    const monday = new Date(jan4); monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (week - 1) * 7);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    return [getLocalDateString(monday), getLocalDateString(sunday)];
+  };
+  const recordDate = record => { const d = new Date(record.date || ''); return Number.isNaN(d.getTime()) ? String(record.date || '').slice(0, 10) : getLocalDateString(d); };
+  const visibleRecords = records.filter(record => {
+    const day = recordDate(record);
+    if (dateMode === 'daily') return day === reportDate;
+    if (dateMode === 'weekly') { const [start, end] = weekRange(reportWeek); return day >= start && day <= end; }
+    return true;
+  });
+  const selectedRecords = visibleRecords.filter(record => (selectedCategory === 'all' || record.task === selectedCategory) && (selectedBuilding === 'all' || canonicalBuilding(record.building, record.floor) === selectedBuilding) && (selectedFloor === 'all' || String(record.floor) === selectedFloor) && (selectedRoom === 'all' || `${canonicalBuilding(record.building, record.floor)}|${record.floor}|${record.roomNumber}` === selectedRoom));
+  const photoCount = selectedRecords.filter(record => record.photo || record.file_url).length;
   const displayBuilding = value => canonicalBuilding(value) === BUILDING_B ? t.documents.buildingB : t.documents.buildingA;
   const categories = [...new Set([...TASKS_13, ...records.map(record => record.task).filter(Boolean)])];
   const byLocation = entries => {
@@ -1780,18 +1473,18 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
   };
 
   return <div className="space-y-4 sm:space-y-6">
-    <header className="rounded-xl border border-slate-700 bg-slate-800/80 p-4"><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p><p className="mt-3 text-[11px] text-emerald-300">{labels.recordCount.replace('{count}', records.length)}</p></header>
+    <header className="rounded-xl border border-slate-700 bg-slate-800/80 p-4"><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p><div className="mt-3 flex flex-wrap items-center gap-2"><select value={selectedCategory} onChange={event => setSelectedCategory(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกหมวดงาน' : 'All Work Categories'}</option>{TASKS_13.map(task => <option key={task} value={task}>{taskLabel(task, lang)}</option>)}</select><select value={selectedBuilding} onChange={event => { setSelectedBuilding(event.target.value); setSelectedRoom('all'); }} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกอาคาร' : 'All Buildings'}</option>{BUILDING_VALUES.map(building => <option key={building} value={building}>{building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA}</option>)}</select><select value={selectedFloor} onChange={event => { setSelectedFloor(event.target.value); setSelectedRoom('all'); }} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกชั้น' : 'All Floors'}</option>{FLOORS.map(floor => <option key={floor} value={String(floor)}>{lang === 'th' ? `ชั้น ${floor}` : `Floor ${floor}`}</option>)}</select><select value={selectedRoom} onChange={event => setSelectedRoom(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกห้อง' : 'All Rooms'}</option>{rooms.filter(room => (selectedBuilding === 'all' || canonicalBuilding(room.building, room.floor) === selectedBuilding) && (selectedFloor === 'all' || String(room.floor) === selectedFloor)).map(room => <option key={room.id} value={`${canonicalBuilding(room.building, room.floor)}|${room.floor}|${room.roomNumber}`}>{room.roomNumber} · {room.building}</option>)}</select><select value={dateMode} onChange={event => setDateMode(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกวันที่' : 'All Dates'}</option><option value="daily">{lang === 'th' ? 'รายวัน' : 'Daily'}</option><option value="weekly">{lang === 'th' ? 'รายสัปดาห์' : 'Weekly'}</option></select>{dateMode === 'daily' && <input type="date" value={reportDate} onChange={event => setReportDate(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" />}{dateMode === 'weekly' && <input type="week" value={reportWeek} onChange={event => setReportWeek(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" />}<span className="rounded-full bg-emerald-500/10 px-3 py-2 text-[10px] font-semibold text-emerald-300">{lang === 'th' ? `${selectedRecords.length} รายการ · ${photoCount} รูป` : `${selectedRecords.length} records · ${photoCount} photos`}</span><button type="button" onClick={() => downloadFile(JSON.stringify(selectedRecords, null, 2), `inspection-report-${dateMode}-${dateMode === 'daily' ? reportDate : reportWeek}.json`, 'application/json')} className="rounded-md bg-slate-700 px-3 py-2 text-xs font-semibold text-slate-100">{lang === 'th' ? 'ส่งออกรายงาน' : 'Export Report'}</button></div></header>
     <div className="space-y-3">
       {categories.map((task, index) => {
-        const taskRecords = records.filter(record => record.task === task).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const taskRecords = selectedRecords.filter(record => record.task === task).sort((a, b) => String(b.date).localeCompare(String(a.date)));
         const grouped = byLocation(taskRecords);
         return <details key={task} open={index === 0 && records.length > 0} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
-          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-slate-700/30"><span className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-xs font-bold text-emerald-400">{index + 1}</span><b className="text-sm text-slate-100">{task}</b></span><span className="text-[10px] text-slate-400">{labels.recordCount.replace('{count}', taskRecords.length)}</span></summary>
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-slate-700/30"><span className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-xs font-bold text-emerald-400">{index + 1}</span><b className="text-sm text-slate-100">{taskLabel(task, lang)}</b></span><span className="text-[10px] text-slate-400">{labels.recordCount.replace('{count}', taskRecords.length)}</span></summary>
           <div className="space-y-3 border-t border-slate-700 p-3 sm:p-4">
             {grouped.size === 0 ? <p className="rounded-lg bg-slate-900/60 p-4 text-xs text-slate-400">{labels.noRecords}</p> : [...grouped.entries()].map(([building, floors]) => <section key={building} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"><h3 className="mb-3 text-xs font-bold text-emerald-300">{labels.building}: {displayBuilding(building)}</h3>
               <div className="space-y-3">{[...floors.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([floor, floorRooms]) => <div key={floor}><h4 className="mb-2 text-[11px] font-semibold text-slate-300">{labels.floor} {floor}</h4><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{[...floorRooms.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([roomNumber, roomRecords]) => {
-                const room = rooms.find(item => String(item.roomNumber) === roomNumber);
-                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p>{record.photo?.file_url && <DriveImageThumbnail key={`${record.id}:${record.photo.file_url}`} fileUrl={record.photo.file_url} fileName={record.photo.name} label={labels.fileLink} />}{record.file_url && <a href={record.file_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold text-sky-300 underline">{labels.fileLink}</a>}{record.folder_path && <p className="mt-1 break-all text-slate-500">{labels.folderPath}: {record.folder_path}</p>}</div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
+                const room = rooms.find(item => String(item.roomNumber) === roomNumber && String(item.floor) === String(roomRecords[0]?.floor || '') && canonicalBuilding(item.building, item.floor) === canonicalBuilding(roomRecords[0]?.building, roomRecords[0]?.floor)) || rooms.find(item => String(item.roomNumber) === roomNumber && canonicalBuilding(item.building, item.floor) === building);
+                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p>{record.photo && <LocalEvidenceButton record={record} kind="photo" label={labels.viewPhotos} lang={lang} />}{record.riDocument && <LocalEvidenceButton record={record} kind="ri" label={labels.viewRiDocument} lang={lang} />}{record.photo?.file_url && <DriveImageThumbnail key={`${record.id}:${record.photo.file_url}`} fileUrl={record.photo.file_url} fileName={record.photo.name} label={labels.fileLink} />}{record.file_url && <a href={record.file_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold text-sky-300 underline">{labels.fileLink}</a>}{record.folder_path && <p className="mt-1 break-all text-slate-500">{labels.folderPath}: {record.folder_path}</p>}</div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
               })}</div></div>)}</div>
             </section>)}
           </div>
@@ -1804,7 +1497,7 @@ function InspectionRecordsView({ t, rooms, records, onInspectRoom }) {
 // ==========================================
 // MODULE 5: DOCUMENT CENTER
 // ==========================================
-function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, historyRows = [], onRecordSaved }) {
+function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRecordSaved }) {
   const labels = t.documents;
   const sampleDocs = () => [
     { id: 'seed-1', name: 'Inspection_Report_Floor_4_Q3.pdf', reference: 'INS-2026-004', documentType: 'inspection', building: BUILDING_A, floor: '4', roomNumber: '401', category: 'Architecture', date: getLocalDateString(), status: 'completed', size: '3.4 MB' },
@@ -1838,14 +1531,14 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
   });
 
   useEffect(() => {
-    const remoteDocs = historyRows.filter(row => !['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()) || row.file_url).map(historyRowToDocument);
-    if (!remoteDocs.length) return;
-    setDocs(current => {
-      const byId = new Map(current.map(doc => [String(doc.id), doc]));
-      remoteDocs.forEach(doc => byId.set(String(doc.id), { ...(byId.get(String(doc.id)) || {}), ...doc, file: byId.get(String(doc.id))?.file || null }));
-      return [...byId.values()];
+    let active = true;
+    docs.filter(doc => !doc.file && !String(doc.id).startsWith('seed-')).forEach(doc => {
+      loadInspectionEvidence(doc.id, 'photo').then(file => {
+        if (active && file) setDocs(current => current.map(item => item.id === doc.id ? { ...item, file } : item));
+      }).catch(error => console.warn('Could not restore a locally saved document file:', error));
     });
-  }, [historyRows]);
+    return () => { active = false; };
+  }, [docs]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1868,10 +1561,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
   useEffect(() => () => { if (selectedDoc?.previewUrl) URL.revokeObjectURL(selectedDoc.previewUrl); }, [selectedDoc]);
 
   const buildingKeys = BUILDING_VALUES;
-  const floorsForBuilding = building => [...new Set([
-    ...rooms.filter(room => canonicalBuilding(room.building, room.floor) === building).map(room => String(room.floor)),
-    ...docs.filter(doc => canonicalBuilding(doc.building, doc.floor) === building).map(doc => String(doc.floor)),
-  ])].sort((a, b) => Number(a) - Number(b));
+  const floorsForBuilding = () => FLOORS.map(String);
   const floors = floorsForBuilding(form.building);
   const roomOptions = rooms.filter(room => canonicalBuilding(room.building, room.floor) === form.building && String(room.floor) === String(form.floor));
   const displayBuilding = key => canonicalBuilding(key) === BUILDING_B ? labels.buildingB : labels.buildingA;
@@ -1907,7 +1597,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
     event.preventDefault();
     if (savingUpload) return;
     if (!form.file || !form.floor || !form.roomNumber || !form.category || (form.documentType === 'ri' && (!form.scheduledDate || form.scheduledDate < today))) { setFormError(labels.required); return; }
-    if (form.file.size > MAX_UPLOAD_BYTES) { setFormError(t.sync.fileTooLarge); return; }
+    if (form.file.size > MAX_UPLOAD_BYTES) { setFormError(t.storage.fileTooLarge); return; }
     const documentRecord = { id: crypto.randomUUID(), name: form.file.name, reference: form.reference.trim() || `DOC-${today.replaceAll('-', '')}`, documentType: form.documentType, building: form.building, floor: String(form.floor), roomNumber: String(form.roomNumber), category: form.category, date: today, scheduledDate: form.documentType === 'ri' ? form.scheduledDate : null, status: 'pending', size: `${(form.file.size / 1024 / 1024).toFixed(2)} MB`, file: form.file };
     setDocs(current => [documentRecord, ...current]);
     setPath({ building: documentRecord.building, floor: documentRecord.floor, room: documentRecord.roomNumber, category: documentRecord.category });
@@ -1915,13 +1605,11 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
     try {
       const saved = await onRecordSaved(docToHistoryRow(documentRecord), form.file);
       if (saved) setDocs(current => current.map(doc => doc.id === documentRecord.id ? { ...doc, file_url: saved.file_url || doc.file_url, folder_path: saved.folder_path || doc.folder_path, file_name: saved.file_name || doc.file_name } : doc));
-      if (saved?._savedToBackend && saved.file_url) showToast(t.sync.uploadSuccessLink, saved.file_url);
-      else if (saved?._savedToBackend) showToast(t.sync.uploadSuccess);
-      else showToast(t.sync.uploadFailed);
+      showToast(lang === 'th' ? 'บันทึกเอกสารไว้ในอุปกรณ์นี้แล้ว' : 'Document saved on this device');
       setUploadOpen(false);
     } catch (error) {
       console.error('Document upload failed:', error);
-      setFormError(t.sync.uploadFailed);
+      setFormError(t.storage.uploadFailed);
     } finally {
       setSavingUpload(false);
     }
@@ -1948,7 +1636,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
 
   const floorsAtPath = path.building ? floorsForBuilding(path.building) : [];
   const roomNumbersAtPath = path.building && path.floor ? [...new Set([
-    ...rooms.filter(room => canonicalBuilding(room.building, room.floor) === path.building && String(room.floor) === String(path.floor)).map(room => String(room.roomNumber)),
+    ...Array.from({ length: 27 }, (_, index) => `${path.floor}${String(index + 1).padStart(2, '0')}`),
     ...docs.filter(doc => canonicalBuilding(doc.building, doc.floor) === path.building && String(doc.floor) === String(path.floor)).map(doc => String(doc.roomNumber)),
   ])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) : [];
   const drillItems = !path.building
@@ -1989,8 +1677,8 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, hist
       <label className="space-y-1 text-xs text-slate-300"><span>{labels.room}</span><select required value={form.roomNumber} onChange={event => setForm(current => ({ ...current, roomNumber: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{roomOptions.map(room => <option key={room.id} value={room.roomNumber}>{labels.room} {room.roomNumber}</option>)}</select></label>
       <label className="space-y-1 text-xs text-slate-300"><span>{labels.category}</span><select value={form.category} onChange={event => setForm(current => ({ ...current, category: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="Architecture">{labels.architecture}</option><option value="MEP">{labels.mep}</option><option value="Structure">{labels.structure}</option></select></label>
       {form.documentType === 'ri' && <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.scheduledDate} *</span><input type="date" required min={today} value={form.scheduledDate} onChange={event => setForm(current => ({ ...current, scheduledDate: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"/></label>}
-      <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.file}</span><input type="file" accept="application/pdf,image/*" required disabled={savingUpload} onChange={event => { const file = event.target.files?.[0] || null; if (file && file.size > MAX_UPLOAD_BYTES) { setForm(current => ({ ...current, file: null })); setFormError(t.sync.fileTooLarge); event.target.value = ''; return; } setFormError(''); setForm(current => ({ ...current, file })); }} className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:text-white disabled:opacity-50"/></label></div>
-      {savingUpload && <div role="status" className="rounded-lg border border-sky-500/30 bg-sky-950/30 px-3 py-2 text-xs text-sky-200"><span className="mb-2 block">{t.sync.uploading}</span><div className="h-1.5 overflow-hidden rounded-full bg-slate-700"><div className="h-full w-2/3 animate-pulse rounded-full bg-sky-400" /></div></div>}{formError && <p role="alert" className="text-xs font-semibold text-red-300">{formError}</p>}<div className="flex flex-col-reverse gap-2 border-t border-slate-700 pt-3 sm:flex-row sm:justify-end"><button type="button" disabled={savingUpload} onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200 disabled:opacity-50">{labels.cancel}</button><button type="submit" disabled={savingUpload} className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-wait disabled:opacity-60">{savingUpload ? t.sync.uploading : labels.save}</button></div>
+      <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.file}</span><input type="file" accept="application/pdf,image/*" required disabled={savingUpload} onChange={event => { const file = event.target.files?.[0] || null; if (file && file.size > MAX_UPLOAD_BYTES) { setForm(current => ({ ...current, file: null })); setFormError(t.storage.fileTooLarge); event.target.value = ''; return; } setFormError(''); setForm(current => ({ ...current, file })); }} className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:text-white disabled:opacity-50"/></label></div>
+      {savingUpload && <div role="status" className="rounded-lg border border-sky-500/30 bg-sky-950/30 px-3 py-2 text-xs text-sky-200"><span className="mb-2 block">{t.storage.saving}</span><div className="h-1.5 overflow-hidden rounded-full bg-slate-700"><div className="h-full w-2/3 animate-pulse rounded-full bg-sky-400" /></div></div>}{formError && <p role="alert" className="text-xs font-semibold text-red-300">{formError}</p>}<div className="flex flex-col-reverse gap-2 border-t border-slate-700 pt-3 sm:flex-row sm:justify-end"><button type="button" disabled={savingUpload} onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200 disabled:opacity-50">{labels.cancel}</button><button type="submit" disabled={savingUpload} className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-wait disabled:opacity-60">{savingUpload ? t.storage.saving : labels.save}</button></div>
     </form></div>}
 
     {reasonDoc && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-3 sm:p-5"><form onSubmit={submitReason} className="w-full max-w-lg space-y-4 rounded-2xl border border-red-900 bg-slate-800 p-5 shadow-2xl sm:p-6"><div><h3 className="text-base font-bold text-red-200">{labels.expiredTitle}</h3><p className="mt-1 text-xs text-slate-400">{labels.expiredDescription}</p><p className="mt-2 text-xs text-slate-300">{reasonDoc.reference} · {reasonDoc.name}</p></div><label className="block space-y-1.5 text-xs font-semibold text-slate-200"><span>{labels.reasonLabel} *</span><textarea autoFocus required minLength={5} value={reasonText} onChange={event => setReasonText(event.target.value)} placeholder={labels.reasonPlaceholder} rows={5} className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-red-400 focus:outline-none"/></label><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setReasonDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200">{labels.cancel}</button><button type="submit" disabled={reasonText.trim().length < 5} className="rounded-lg bg-red-700 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{labels.archive}</button></div></form></div>}
@@ -2163,29 +1851,34 @@ function StatusBadge({ status, t }) {
 // ROOM DETAIL INSPECTION MODAL
 // ==========================================
 const TASK_PLAN_POSITIONS = [
-  [15, 50], [85, 48], [72, 43], [80, 37], [84, 53], [65, 32], [30, 43],
-  [51, 38], [52, 53], [50, 11], [42, 40], [33, 35], [72, 86],
+  [37.5, 31.8], [21.8, 61.9], [55.6, 61.9], [22, 82.8], [78, 67.6], [78, 28.4], [63.2, 42.9],
+  [63.2, 49], [68.8, 49], [27.1, 20.6], [34.4, 42.9], [29.7, 47.4], [45, 84.9],
 ];
+const TASK_12_SECONDARY_POSITION = [53.3, 84.9];
 
-function RoomPlan({ room, t }) {
+function RoomPlan({ room, t, lang, records = [] }) {
+  const [selectedTaskIndex, setSelectedTaskIndex] = useState(0);
   const markerColor = (status) => status === 'passed' ? '#10b981' : status === 'defect' ? '#ef4444' : status === 'inProgress' ? '#f59e0b' : '#64748b';
+  const selectedTask = TASKS_13[selectedTaskIndex];
+  const selectedRecord = [...records].filter(record => String(record.roomNumber) === String(room.roomNumber) && String(record.floor) === String(room.floor) && canonicalBuilding(record.building, record.floor) === canonicalBuilding(room.building, room.floor) && record.task === selectedTask).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
   return <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900 p-4">
-    <div><h4 className="text-sm font-bold text-slate-100">Room Plan Task Map</h4><p className="text-[10px] text-slate-400">Attached floor plan · numbered markers show task locations</p></div>
+    <div><h4 className="text-sm font-bold text-slate-100">{lang === 'th' ? 'แผนผังห้องพร้อมตำแหน่งงานตรวจ' : 'Room Plan Task Map'}</h4><p className="text-[10px] text-slate-400">{lang === 'th' ? 'เลือกหมายเลขเพื่อดูผลตรวจของตำแหน่งนั้น' : 'Select a marker to view the inspection details for that location.'}</p></div>
     <div className="mx-auto max-h-[560px] max-w-[500px] overflow-hidden rounded-lg bg-slate-900">
       <div className="relative aspect-[408/454] w-full">
         <img src={roomPlanImage} alt="Room plan with inspection task markers" className="absolute inset-0 h-full w-full object-contain" />
         {TASKS_13.map((task, index) => {
         const [x, y] = TASK_PLAN_POSITIONS[index];
         const status = room.tasks?.[task] || 'pending';
-        return <span key={task} title={`${index + 1}. ${task}: ${status}`} className="absolute grid h-6 w-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[10px] font-extrabold text-white shadow-md" style={{ left: `${x}%`, top: `${y}%`, backgroundColor: markerColor(status) }}>{index + 1}</span>;
+        return <React.Fragment key={task}><button type="button" aria-label={`${index + 1}. ${taskLabel(task, lang)}`} aria-pressed={selectedTaskIndex === index} onClick={() => setSelectedTaskIndex(index)} title={`${index + 1}. ${taskLabel(task, lang)}: ${status}`} className={`absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[10px] font-extrabold shadow-md ${selectedTaskIndex === index ? 'z-10 scale-125 ring-2 ring-white' : ''} ${status === 'inProgress' ? 'text-slate-950' : 'text-white'}`} style={{ left: `${x}%`, top: `${y}%`, backgroundColor: markerColor(status) }}>{index + 1}</button>{index === 11 && <button type="button" aria-label="12. Shower Screen secondary position" onClick={() => setSelectedTaskIndex(11)} title={`12. ${taskLabel(task, lang)}`} className="absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[10px] font-extrabold text-white shadow-md" style={{ left: `${TASK_12_SECONDARY_POSITION[0]}%`, top: `${TASK_12_SECONDARY_POSITION[1]}%`, backgroundColor: markerColor(status) }}>12</button>}</React.Fragment>;
       })}
       </div>
     </div>
+    <div className="rounded-lg border border-slate-700 bg-slate-800/70 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-slate-100">{selectedTaskIndex + 1}. {taskLabel(selectedTask, lang)}</b><StatusBadge status={room.tasks?.[selectedTask] || 'pending'} t={t} /></div><p className="mt-2 text-slate-300">{t.records.inspector}: {selectedRecord?.inspector || '—'} · {t.records.inspectionDate}: {selectedRecord?.date ? new Date(selectedRecord.date).toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US') : '—'}</p><p className="mt-1 text-slate-400">{selectedRecord?.remarks || '—'}</p>{selectedRecord?.photo?.file_url && <a className="mt-2 inline-block text-sky-300 underline" href={selectedRecord.photo.file_url} target="_blank" rel="noopener noreferrer">{t.records.viewPhotos}</a>}{selectedRecord?.riDocument?.file_url && <a className="ml-3 mt-2 inline-block text-sky-300 underline" href={selectedRecord.riDocument.file_url} target="_blank" rel="noopener noreferrer">{t.records.viewRiDocument}</a>}</div>
     <div className="flex flex-wrap gap-3 text-[10px] text-slate-400">{[['passed', '#10b981'], ['defect', '#ef4444'], ['inProgress', '#f59e0b'], ['pending', '#64748b']].map(([key, color]) => <span key={key} className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />{t.status[key]}</span>)}</div>
   </section>;
 }
 
-function RoomDetailModal({ room, t, records = [], showToast, onClose }) {
+function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
   const [evidencePreview, setEvidencePreview] = useState(null);
   const [loadingEvidence, setLoadingEvidence] = useState('');
   useEffect(() => () => {
@@ -2197,7 +1890,7 @@ function RoomDetailModal({ room, t, records = [], showToast, onClose }) {
     setLoadingEvidence(key);
     try {
       let blob = null;
-      try { blob = await loadInspectionEvidence(record.evidence_id || record.id, kind); }
+      try { blob = await loadInspectionEvidence(kind === 'ri' && record.riDocument?.document_id ? record.riDocument.document_id : record.evidence_id || record.id, kind === 'ri' && record.riDocument?.document_id ? 'photo' : kind); }
       catch (storageError) {
         if (!(record.file_url || record.photo?.file_url || record.riDocument?.file_url)) throw storageError;
       }
@@ -2230,7 +1923,7 @@ function RoomDetailModal({ room, t, records = [], showToast, onClose }) {
         <div className="flex items-center justify-between border-b border-slate-700 pb-4">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>รายละเอียดห้องพัก {room.roomNumber}</span>
+              <span>{lang === 'th' ? 'รายละเอียดห้องพัก' : 'Room Details'} {room.roomNumber} · {room.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA}</span>
               <span className="text-xs font-normal text-slate-400">({room.type})</span>
             </h3>
             <p className="text-xs text-slate-400">ชั้น {room.floor} • ผู้ตรวจล่าสุด: {room.lastInspector}</p>
@@ -2246,7 +1939,7 @@ function RoomDetailModal({ room, t, records = [], showToast, onClose }) {
           <StatusBadge status={room.status} t={t} />
         </div>
 
-        <RoomPlan room={room} t={t} />
+        <RoomPlan room={room} t={t} lang={lang} records={records} />
 
         {/* 13 Tasks Checklist Toggles */}
         <div>
@@ -2255,7 +1948,7 @@ function RoomDetailModal({ room, t, records = [], showToast, onClose }) {
             {TASKS_13.map((tName, index) => {
               const taskStatus = room.tasks?.[tName] || 'pending';
               const isPassed = taskStatus === 'passed';
-              const taskRecords = records.filter(record => String(record.roomNumber) === String(room.roomNumber) && record.task === tName);
+              const taskRecords = records.filter(record => String(record.roomNumber) === String(room.roomNumber) && String(record.floor) === String(room.floor) && canonicalBuilding(record.building, record.floor) === canonicalBuilding(room.building, room.floor) && record.task === tName);
               const photoRecord = taskRecords.find(record => record.photo);
               const riRecord = taskRecords.find(record => record.riDocument);
               return (
@@ -2268,7 +1961,7 @@ function RoomDetailModal({ room, t, records = [], showToast, onClose }) {
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium"><span className="mr-1 font-bold">{index + 1}.</span>{tName}</span>
+                    <span className="font-medium"><span className="mr-1 font-bold">{index + 1}.</span>{taskLabel(tName, lang)}</span>
                     <StatusBadge status={taskStatus} t={t} />
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
