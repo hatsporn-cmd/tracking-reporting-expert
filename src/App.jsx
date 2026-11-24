@@ -60,7 +60,8 @@ const i18n = {
       expiredTitle: "รายงานเหตุผลที่ไม่ได้เข้าตรวจ", expiredDescription: "เอกสาร RI หมดอายุ กรุณาระบุเหตุผลก่อนจัดเก็บเอกสาร",
       reasonLabel: "เหตุผลที่ไม่ได้เข้าตรวจ", reasonPlaceholder: "อธิบายเหตุผลที่ไม่ได้เข้าตรวจ...", archive: "บันทึกเหตุผลและจัดเก็บ",
       archivedReason: "เหตุผลที่จัดเก็บ", documentPreview: "ตัวอย่างเอกสาร", uploaded: "อัปโหลดเอกสารแล้ว", allLevels: "ทั้งหมด",
-      buildingName: "อาคาร A", buildingA: "อาคาร A", buildingB: "อาคาร B", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"], openFile: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์"
+      buildingName: "อาคาร A", buildingA: "อาคาร A", buildingB: "อาคาร B", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"], openFile: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์",
+      timeFilter: "ตัวกรองช่วงเวลา", dateModes: { all: "ทุกช่วงเวลา", today: "วันนี้", daily: "รายวัน", weekly: "รายสัปดาห์", monthly: "รายเดือน", range: "กำหนดช่วงวันที่" }, fromDate: "ตั้งแต่วันที่", toDate: "ถึงวันที่", resetDateFilter: "ล้างตัวกรองเวลา", showingPeriod: count => `แสดง ${count} เอกสารในช่วงเวลาที่เลือก`, emptyPeriod: "ไม่พบเอกสารในช่วงเวลาที่เลือก", typeFilter: "ประเภทเอกสาร", allTypes: "ทุกประเภท", statusFilter: "สถานะ", allStatuses: "ทุกสถานะ", searchDocuments: "ค้นหาเลขอ้างอิงหรือชื่อเอกสาร...", emptyFiltered: "ไม่พบเอกสารตามตัวกรองที่เลือก"
     },
     records: {
       title: "ประวัติการตรวจแยกตามหมวดงาน", subtitle: "จัดกลุ่มตามงานตรวจ แล้วแยกตามอาคาร ชั้น และห้อง",
@@ -156,7 +157,8 @@ const i18n = {
       expiredTitle: "Non-Inspection Reason Report", expiredDescription: "This RI document has expired. Enter the reason before archiving it.",
       reasonLabel: "Reason for missed inspection", reasonPlaceholder: "Explain why the inspection was missed...", archive: "Save reason and archive",
       archivedReason: "Archive reason", documentPreview: "Document Preview", uploaded: "Document uploaded", allLevels: "All",
-      buildingName: "Building A", buildingA: "Building A", buildingB: "Building B", workCategories: ["Architecture", "MEP", "Structure"], openFile: "Open file in Google Drive", folderPath: "Drive folder"
+      buildingName: "Building A", buildingA: "Building A", buildingB: "Building B", workCategories: ["Architecture", "MEP", "Structure"], openFile: "Open file in Google Drive", folderPath: "Drive folder",
+      timeFilter: "Time Period Filter", dateModes: { all: "All Time", today: "Today", daily: "Daily", weekly: "Weekly", monthly: "Monthly", range: "Custom Range" }, fromDate: "From", toDate: "To", resetDateFilter: "Reset Filter", showingPeriod: count => `Showing ${count} documents in selected period`, emptyPeriod: "No documents found for the selected period", typeFilter: "Document Type", allTypes: "All Types", statusFilter: "Status", allStatuses: "All Statuses", searchDocuments: "Search reference or document name...", emptyFiltered: "No documents match the selected filters"
     },
     records: {
       title: "Inspection History by Work Category", subtitle: "Grouped by inspection task, then by building, floor, and room",
@@ -357,6 +359,34 @@ function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
 }
 
 const getLocalDateString = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+function effectiveDocumentDate(doc) {
+  const candidate = doc.documentType === 'ri'
+    ? doc.scheduledDate || doc.appointment_date || doc.appointmentDate || doc.date || doc.uploadedAt || doc.updated_at
+    : doc.date || doc.uploadedAt || doc.updated_at;
+  if (!candidate) return '';
+  const value = String(candidate).trim();
+  const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})$/);
+  if (dateOnly) return dateOnly[1];
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : getLocalDateString(parsed);
+}
+function currentIsoWeekValue(date = new Date()) {
+  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+  return `${utcDate.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+function isoWeekRange(weekValue) {
+  const [year, week] = String(weekValue || '').split('-W').map(Number);
+  if (!year || !week) return ['', ''];
+  const jan4 = new Date(year, 0, 4);
+  const monday = new Date(year, 0, 4 - ((jan4.getDay() + 6) % 7) + (week - 1) * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return [getLocalDateString(monday), getLocalDateString(sunday)];
+}
 const dayDifference = (fromDate, toDate = getLocalDateString()) => Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000);
 const expireDueRiDocuments = (documents, today = getLocalDateString()) => documents.map(doc => doc.documentType === 'ri' && doc.status === 'pending' && doc.scheduledDate && dayDifference(doc.scheduledDate, today) >= 2 ? { ...doc, status: 'expired' } : doc);
 
@@ -1520,6 +1550,13 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
   const lastCheckedDate = useRef(today);
   const [form, setForm] = useState({ documentType: 'general', building: BUILDING_A, floor: '1', roomNumber: '', category: 'Architecture', reference: '', scheduledDate: '', file: null });
   const [savingUpload, setSavingUpload] = useState(false);
+  const [docFilters, setDocFilters] = useState(() => {
+    const currentDate = getLocalDateString();
+    const defaults = { period: 'all', date: currentDate, week: currentIsoWeekValue(), month: currentDate.slice(0, 7), from: currentDate, to: currentDate, type: 'all', status: 'all', search: '' };
+    try { return { ...defaults, ...(JSON.parse(localStorage.getItem('trex-document-hub-filters') || '{}') || {}) }; }
+    catch { return defaults; }
+  });
+  const updateDocFilters = changes => setDocFilters(current => ({ ...current, ...changes }));
 
   const docToHistoryRow = (doc, overrides = {}) => toHistoryLogRow({
     id: doc.id, building: canonicalBuilding(doc.building, doc.floor),
@@ -1558,6 +1595,10 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
     try { localStorage.setItem('trex-documents', JSON.stringify(docs.map(doc => { const metadata = { ...doc }; delete metadata.file; return metadata; }))); }
     catch (error) { console.warn('Could not save document metadata:', error); }
   }, [docs]);
+  useEffect(() => {
+    try { localStorage.setItem('trex-document-hub-filters', JSON.stringify(docFilters)); }
+    catch (error) { console.warn('Could not save document filter preferences:', error); }
+  }, [docFilters]);
   useEffect(() => () => { if (selectedDoc?.previewUrl) URL.revokeObjectURL(selectedDoc.previewUrl); }, [selectedDoc]);
 
   const buildingKeys = BUILDING_VALUES;
@@ -1576,12 +1617,35 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
   };
   const reminders = docs.filter(doc => doc.documentType === 'ri' && lifecycle(doc) === 'pending' && dayDifference(doc.scheduledDate || doc.date, today) >= 0);
 
+  const dateInSelectedPeriod = doc => {
+    const docDate = effectiveDocumentDate(doc);
+    if (!docDate) return false;
+    if (docFilters.period === 'all') return true;
+    if (docFilters.period === 'today') return docDate === today;
+    if (docFilters.period === 'daily') return docDate === docFilters.date;
+    if (docFilters.period === 'monthly') return docDate.startsWith(docFilters.month);
+    if (docFilters.period === 'weekly') {
+      const [start, end] = isoWeekRange(docFilters.week);
+      return docDate >= start && docDate <= end;
+    }
+    if (docFilters.period === 'range') return Boolean(docFilters.from && docFilters.to && docFilters.from <= docFilters.to) && docDate >= docFilters.from && docDate <= docFilters.to;
+    return true;
+  };
+  const normalizedSearch = docFilters.search.trim().toLocaleLowerCase();
+  const matchingDocs = docs.filter(doc => {
+    const matchesType = docFilters.type === 'all' || doc.documentType === docFilters.type;
+    const matchesStatus = docFilters.status === 'all' || lifecycle(doc) === docFilters.status;
+    const searchable = `${doc.reference || ''} ${doc.name || ''} ${doc.file_name || ''} ${doc.building || ''} ${doc.floor || ''} ${doc.roomNumber || ''}`.toLocaleLowerCase();
+    return matchesType && matchesStatus && (!normalizedSearch || searchable.includes(normalizedSearch)) && dateInSelectedPeriod(doc);
+  });
+
   const resetPathTo = level => setPath(previous => ({ building: previous.building, floor: level === 'floor' || level === 'room' || level === 'category' ? previous.floor : null, room: level === 'room' || level === 'category' ? previous.room : null, category: level === 'category' ? previous.category : null }));
   const chooseBuilding = value => setPath({ building: value, floor: null, room: null, category: null });
   const chooseFloor = value => setPath(current => ({ ...current, floor: value, room: null, category: null }));
   const chooseRoom = value => setPath(current => ({ ...current, room: value, category: null }));
   const chooseCategory = value => setPath(current => ({ ...current, category: value }));
-  const docsAtPath = docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === path.category)
+  const periodResultCount = matchingDocs.filter(doc => (!path.building || doc.building === path.building) && (!path.floor || String(doc.floor) === String(path.floor)) && (!path.room || String(doc.roomNumber) === String(path.room)) && (!path.category || doc.category === path.category)).length;
+  const docsAtPath = matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === path.category)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.reference || '').localeCompare(String(b.reference || ''), undefined, { numeric: true }));
 
   const openUpload = () => {
@@ -1640,19 +1704,34 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
     ...docs.filter(doc => canonicalBuilding(doc.building, doc.floor) === path.building && String(doc.floor) === String(path.floor)).map(doc => String(doc.roomNumber)),
   ])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) : [];
   const drillItems = !path.building
-    ? buildingKeys.map(value => ({ value, label: displayBuilding(value), count: docs.filter(doc => doc.building === value).length }))
+    ? buildingKeys.map(value => ({ value, label: displayBuilding(value), count: matchingDocs.filter(doc => doc.building === value).length }))
     : !path.floor
-      ? floorsAtPath.map(value => ({ value, label: `${labels.floor} ${value}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === value).length }))
+      ? floorsAtPath.map(value => ({ value, label: `${labels.floor} ${value}`, count: matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === value).length }))
       : !path.room
-        ? roomNumbersAtPath.map(value => ({ value, label: `${labels.room} ${value}`, count: docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === value).length }))
+        ? roomNumbersAtPath.map(value => ({ value, label: `${labels.room} ${value}`, count: matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === value).length }))
         : !path.category
-          ? ['Architecture', 'MEP', 'Structure'].map(value => ({ value, label: displayCategory(value), count: docs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === value).length }))
+          ? ['Architecture', 'MEP', 'Structure'].map(value => ({ value, label: displayCategory(value), count: matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === value).length }))
           : [];
   const selectDrillItem = value => !path.building ? chooseBuilding(value) : !path.floor ? chooseFloor(value) : !path.room ? chooseRoom(value) : chooseCategory(value);
 
   return <div className="space-y-4 sm:space-y-6">
     {reminders.length > 0 && <aside role="status" className="rounded-xl border border-amber-400/50 bg-amber-950/50 p-4 text-amber-100 shadow-lg"><div className="flex items-start gap-3"><Bell className="mt-0.5 h-5 w-5 shrink-0 text-amber-300"/><div><h2 className="text-sm font-bold">{labels.morningWarning}</h2><ul className="mt-2 space-y-1 text-xs">{reminders.map(doc => { const elapsed = dayDifference(doc.scheduledDate || doc.date, today); return <li key={doc.id}>{doc.reference} · {doc.name} · {elapsed === 0 ? labels.dueToday : labels.reminderDay.replace('{day}', String(elapsed))}</li>; })}</ul></div></div></aside>}
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/80 p-4"><div><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p></div>{canEdit && <button type="button" onClick={openUpload} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"><Upload className="h-4 w-4"/>{labels.upload}</button>}</header>
+
+    <section aria-label={labels.timeFilter} className="rounded-xl border border-slate-700 bg-slate-800/70 p-3 sm:p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-bold text-slate-100">{labels.timeFilter}</h3><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">{labels.showingPeriod(periodResultCount)}</span></div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.timeFilter}</span><select value={docFilters.period} onChange={event => updateDocFilters({ period: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100">{Object.entries(labels.dateModes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>
+        {docFilters.period === 'daily' && <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.date}</span><input type="date" value={docFilters.date} onChange={event => updateDocFilters({ date: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label>}
+        {docFilters.period === 'weekly' && <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.dateModes.weekly}</span><input type="week" value={docFilters.week} onChange={event => updateDocFilters({ week: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label>}
+        {docFilters.period === 'monthly' && <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.dateModes.monthly}</span><input type="month" value={docFilters.month} onChange={event => updateDocFilters({ month: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label>}
+        {docFilters.period === 'range' && <><label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.fromDate}</span><input type="date" value={docFilters.from} onChange={event => updateDocFilters({ from: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label><label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.toDate}</span><input type="date" min={docFilters.from || undefined} value={docFilters.to} onChange={event => updateDocFilters({ to: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label></>}
+        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.typeFilter}</span><select value={docFilters.type} onChange={event => updateDocFilters({ type: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="all">{labels.allTypes}</option><option value="general">{labels.typeGeneral}</option><option value="ri">{labels.typeRI}</option><option value="inspection">{labels.typeInspection}</option><option value="defect">{labels.typeDefect}</option></select></label>
+        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.statusFilter}</span><select value={docFilters.status} onChange={event => updateDocFilters({ status: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="all">{labels.allStatuses}</option><option value="pending">{labels.statusPending}</option><option value="completed">{labels.statusCompleted}</option><option value="expired">{labels.statusExpired}</option><option value="archived">{labels.statusArchived}</option></select></label>
+        <label className="space-y-1 text-[10px] font-semibold text-slate-300 sm:col-span-2"><span>{labels.searchDocuments}</span><input type="search" value={docFilters.search} onChange={event => updateDocFilters({ search: event.target.value })} placeholder={labels.searchDocuments} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500" /></label>
+      </div>
+      {docFilters.period !== 'all' && <div className="mt-3 flex justify-end"><button type="button" onClick={() => updateDocFilters({ period: 'all', date: today, week: currentIsoWeekValue(), month: today.slice(0, 7), from: today, to: today })} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700">{labels.resetDateFilter}</button></div>}
+    </section>
 
     <nav aria-label={lang === 'th' ? 'ลำดับตำแหน่งเอกสาร' : 'Document location hierarchy'} className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/70 p-3 text-xs">
       {[['building', labels.building, path.building], ['floor', labels.floor, path.floor], ['room', labels.room, path.room], ['category', labels.category, path.category]].map(([level, label, value], index) => <React.Fragment key={level}>{index > 0 && <span className="px-1 text-slate-500">›</span>}<button type="button" disabled={!path[level]} onClick={() => resetPathTo(level)} className={`rounded-md px-2 py-1.5 ${path[level] ? 'text-emerald-300 hover:bg-slate-700' : 'text-slate-500'}`}>{value ? (level === 'building' ? displayBuilding(value) : level === 'category' ? displayCategory(value) : `${label} ${value}`) : label}</button></React.Fragment>)}
@@ -1661,7 +1740,7 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
     {!path.category ? <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{drillItems.map(item => <button type="button" key={item.value} onClick={() => selectDrillItem(item.value)} className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/70 p-4 text-left hover:border-emerald-500/60 hover:bg-slate-800"><span className="flex min-w-0 items-center gap-3"><FolderKanban className="h-5 w-5 shrink-0 text-emerald-400"/><b className="truncate text-sm text-slate-100">{item.label}</b></span><span className="shrink-0 rounded-full bg-slate-900 px-2 py-1 text-[10px] text-slate-400">{item.count}</span></button>)}</section>
       : <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 p-4"><h3 className="text-sm font-bold text-slate-100">{displayBuilding(path.building)} · {labels.floor} {path.floor} · {labels.room} {path.room} · {displayCategory(path.category)}</h3><span className="text-[10px] text-slate-400">{labels.referenceNumber} / {labels.date}</span></div>
-        {!docsAtPath.length ? <p className="p-6 text-center text-xs text-slate-400">{labels.empty}</p> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
+        {!docsAtPath.length ? <div className="p-6 text-center text-xs text-slate-400"><p>{docFilters.period !== 'all' ? labels.emptyPeriod : (docFilters.type !== 'all' || docFilters.status !== 'all' || normalizedSearch) ? labels.emptyFiltered : labels.empty}</p>{docFilters.period !== 'all' && <button type="button" onClick={() => updateDocFilters({ period: 'all', date: today, week: currentIsoWeekValue(), month: today.slice(0, 7), from: today, to: today })} className="mt-3 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 font-semibold text-emerald-300 hover:bg-slate-700">{labels.resetDateFilter}</button>}</div> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
           const status = lifecycle(doc);
           return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.file_url && inferEvidenceMimeType(doc.file_name || doc.name).startsWith('image/') && <DriveImageThumbnail key={`${doc.id}:${doc.file_url}`} fileUrl={doc.file_url} fileName={doc.file_name || doc.name} label={labels.openFile} />}{doc.file_url && <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-sky-300 underline">{labels.openFile}</a>}{doc.folder_path && <p className="mt-1 break-all text-[10px] text-slate-500">{labels.folderPath}: {doc.folder_path}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}</div></div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status === 'expired' ? 'bg-red-500/15 text-red-300' : status === 'completed' ? 'bg-emerald-500/15 text-emerald-300' : status === 'archived' ? 'bg-slate-600/30 text-slate-300' : 'bg-amber-500/15 text-amber-300'}`}>{displayStatus(status)}</span><button type="button" onClick={() => handlePreview(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={labels.documentPreview} title={labels.documentPreview}><Eye className="h-4 w-4"/></button><button type="button" onClick={() => handleDownload(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={t.common.export} title={t.common.export}><Download className="h-4 w-4"/></button>{canEdit && status === 'pending' && doc.documentType === 'ri' && <button type="button" onClick={() => markComplete(doc)} className="rounded-md bg-emerald-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-emerald-600">{labels.markComplete}</button>}{canEdit && status === 'expired' && <button type="button" onClick={() => { setReasonDoc(doc); setReasonText(doc.reasonReport || ''); }} className="rounded-md bg-red-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-red-600">{labels.archive}</button>}</div>
