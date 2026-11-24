@@ -61,7 +61,8 @@ const i18n = {
       reasonLabel: "เหตุผลที่ไม่ได้เข้าตรวจ", reasonPlaceholder: "อธิบายเหตุผลที่ไม่ได้เข้าตรวจ...", archive: "บันทึกเหตุผลและจัดเก็บ",
       archivedReason: "เหตุผลที่จัดเก็บ", documentPreview: "ตัวอย่างเอกสาร", uploaded: "อัปโหลดเอกสารแล้ว", allLevels: "ทั้งหมด",
       buildingName: "อาคาร A", buildingA: "อาคาร A", buildingB: "อาคาร B", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"], openFile: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์",
-      timeFilter: "ตัวกรองช่วงเวลา", dateModes: { all: "ทุกช่วงเวลา", today: "วันนี้", daily: "รายวัน", weekly: "รายสัปดาห์", monthly: "รายเดือน", range: "กำหนดช่วงวันที่" }, fromDate: "ตั้งแต่วันที่", toDate: "ถึงวันที่", resetDateFilter: "ล้างตัวกรองเวลา", showingPeriod: count => `แสดง ${count} เอกสารในช่วงเวลาที่เลือก`, emptyPeriod: "ไม่พบเอกสารในช่วงเวลาที่เลือก", typeFilter: "ประเภทเอกสาร", allTypes: "ทุกประเภท", statusFilter: "สถานะ", allStatuses: "ทุกสถานะ", searchDocuments: "ค้นหาเลขอ้างอิงหรือชื่อเอกสาร...", emptyFiltered: "ไม่พบเอกสารตามตัวกรองที่เลือก"
+      timeFilter: "ตัวกรองวันที่", exactDateOnly: "เฉพาะวันที่เลือก", allDates: "ทุกวัน", selectedDate: "วันที่เลือก", resetDateFilter: "กลับไปวันที่เลือก", showingPeriod: (count, all = false) => all ? `แสดง ${count} เอกสารจากทุกวัน` : `แสดง ${count} เอกสารตามวันที่เลือก`, emptyPeriod: "ไม่พบเอกสารในวันที่เลือก", typeFilter: "ประเภทเอกสาร", allTypes: "ทุกประเภท", statusFilter: "สถานะ", allStatuses: "ทุกสถานะ", searchDocuments: "ค้นหาเลขอ้างอิงหรือชื่อเอกสาร...", emptyFiltered: "ไม่พบเอกสารตามตัวกรองที่เลือก",
+      inspected: "ตรวจแล้ว", notInspected: "ยังไม่ตรวจ", inspectionPhotoEvidence: "รูปประกอบการตรวจงาน", noPhotoEvidence: "ไม่มีรูปประกอบ", inspectionStatus: "สถานะการตรวจ", inspectionDate: "วันที่ตรวจ", photoPreview: "ตัวอย่างรูปประกอบการตรวจงาน", weeklyPhotos: "รูปรายสัปดาห์", monthlyPhotos: "รูปรายเดือน", collectedPhotos: "รูปตรวจงานสำหรับรายงาน", photoCollectionHelp: "รวมรูปจากรายการตรวจที่มีหลักฐานตามช่วงเวลาที่เลือก", noReportPhotos: "ไม่มีรูปตรวจงานในช่วงเวลานี้", downloadPhoto: "ดาวน์โหลดรูป", weeklyRange: "สัปดาห์ที่เลือก", monthlyRange: "เดือนที่เลือก", photoCount: count => `${count} รูป`
     },
     records: {
       title: "ประวัติการตรวจแยกตามหมวดงาน", subtitle: "จัดกลุ่มตามงานตรวจ แล้วแยกตามอาคาร ชั้น และห้อง",
@@ -113,7 +114,8 @@ const i18n = {
       defect: "มีข้อบกพร่อง",
       pending: "รอดำเนินการ",
       passed: "ผ่านการตรวจ",
-      rejected: "ไม่ผ่าน"
+      rejected: "ไม่ผ่าน",
+      completed: "เสร็จสิ้น"
     },
     common: {
       search: "ค้นหาห้องพัก หรือ เอกสาร...",
@@ -158,7 +160,8 @@ const i18n = {
       reasonLabel: "Reason for missed inspection", reasonPlaceholder: "Explain why the inspection was missed...", archive: "Save reason and archive",
       archivedReason: "Archive reason", documentPreview: "Document Preview", uploaded: "Document uploaded", allLevels: "All",
       buildingName: "Building A", buildingA: "Building A", buildingB: "Building B", workCategories: ["Architecture", "MEP", "Structure"], openFile: "Open file in Google Drive", folderPath: "Drive folder",
-      timeFilter: "Time Period Filter", dateModes: { all: "All Time", today: "Today", daily: "Daily", weekly: "Weekly", monthly: "Monthly", range: "Custom Range" }, fromDate: "From", toDate: "To", resetDateFilter: "Reset Filter", showingPeriod: count => `Showing ${count} documents in selected period`, emptyPeriod: "No documents found for the selected period", typeFilter: "Document Type", allTypes: "All Types", statusFilter: "Status", allStatuses: "All Statuses", searchDocuments: "Search reference or document name...", emptyFiltered: "No documents match the selected filters"
+      timeFilter: "Filter by Date", exactDateOnly: "Selected Date Only", allDates: "All Dates", selectedDate: "Selected date", resetDateFilter: "Back to Selected Date", showingPeriod: (count, all = false) => all ? `Showing ${count} documents across all dates` : `Showing ${count} documents for selected date`, emptyPeriod: "No documents found on the selected date", typeFilter: "Document Type", allTypes: "All Types", statusFilter: "Status", allStatuses: "All Statuses", searchDocuments: "Search reference or document name...", emptyFiltered: "No documents match the selected filters",
+      inspected: "Inspected", notInspected: "Not Inspected", inspectionPhotoEvidence: "Inspection Photo Evidence", noPhotoEvidence: "No Photo Evidence", inspectionStatus: "Inspection Status", inspectionDate: "Inspection Date", photoPreview: "Inspection Photo Preview", weeklyPhotos: "Weekly Photos", monthlyPhotos: "Monthly Photos", collectedPhotos: "Collected Inspection Photos for Report", photoCollectionHelp: "Inspection records with attached photo evidence for the selected period", noReportPhotos: "No inspection photos found for this period", downloadPhoto: "Download Photo", weeklyRange: "Selected week", monthlyRange: "Selected month", photoCount: count => `${count} photos`
     },
     records: {
       title: "Inspection History by Work Category", subtitle: "Grouped by inspection task, then by building, floor, and room",
@@ -210,7 +213,8 @@ const i18n = {
       defect: "Defect Found",
       pending: "Pending",
       passed: "Passed",
-      rejected: "Needs Rework"
+      rejected: "Needs Rework",
+      completed: "Completed"
     },
     common: {
       search: "Search rooms or documents...",
@@ -360,9 +364,7 @@ function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
 
 const getLocalDateString = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 function effectiveDocumentDate(doc) {
-  const candidate = doc.documentType === 'ri'
-    ? doc.scheduledDate || doc.appointment_date || doc.appointmentDate || doc.date || doc.uploadedAt || doc.updated_at
-    : doc.date || doc.uploadedAt || doc.updated_at;
+  const candidate = doc.scheduledDate || doc.appointment_date || doc.appointmentDate || doc.date || doc.uploadedAt || doc.updated_at;
   if (!candidate) return '';
   const value = String(candidate).trim();
   const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})$/);
@@ -958,7 +960,7 @@ export default function App() {
           )}
 
           {activeTab === 'documentCenter' && (
-            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} canEdit={isEngineer} userName={session.name} onRecordSaved={persistHistoryRecord} />
+            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} inspections={inspectionRecords} canEdit={isEngineer} userName={session.name} onRecordSaved={persistHistoryRecord} />
           )}
 
           {activeTab === 'aiAssistant' && (
@@ -1321,7 +1323,7 @@ function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection 
     const id = crypto.randomUUID();
     setIsSubmitting(true);
     try {
-      await onSubmitInspection({ id, roomNumber: selectedRoomInfo?.roomNumber, building: selectedRoomInfo?.building, floor: selectedRoomInfo?.floor, task: taskName, status, remarks, date: new Date().toISOString(), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: selectedRiDocument ? { id: selectedRiDocument.id, name: selectedRiDocument.file_name || selectedRiDocument.name, type: 'application/pdf', file_url: selectedRiDocument.file_url || '', folder_path: selectedRiDocument.folder_path || '', document_id: selectedRiDocument.id } : null }, { photo: photoFile });
+      await onSubmitInspection({ id, roomNumber: selectedRoomInfo?.roomNumber, building: selectedRoomInfo?.building, floor: selectedRoomInfo?.floor, task: taskName, status, remarks, date: new Date().toISOString(), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: selectedRiDocument ? { id: selectedRiDocument.id, doc_no: selectedRiDocument.reference || '', reference: selectedRiDocument.reference || '', name: selectedRiDocument.file_name || selectedRiDocument.name, type: 'application/pdf', file_url: selectedRiDocument.file_url || '', folder_path: selectedRiDocument.folder_path || '', document_id: selectedRiDocument.id, scheduledDate: selectedRiDocument.scheduledDate, building: selectedRiDocument.building, floor: selectedRiDocument.floor, roomNumber: selectedRiDocument.roomNumber } : null }, { photo: photoFile });
     setRemarks('');
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
@@ -1524,10 +1526,70 @@ function InspectionRecordsView({ t, lang, rooms, records, onInspectRoom }) {
   </div>;
 }
 
+function isInspectionRecordComplete(record) {
+  const status = String(record.status || '').toLowerCase();
+  return ['passed', 'defect', 'inprogress', 'completed'].includes(status) || Boolean(record.date || record.inspection_date || record.updated_at || record.photo || record.file_url);
+}
+
+function inspectionPhotoSource(record) {
+  if (record.photo && (record.photo.file_url || record.photo.url || record.photo.name || record.photo.type)) {
+    return { url: record.photo.file_url || record.photo.url || '', name: record.photo.name || record.file_name || '', local: true };
+  }
+  const candidateUrl = record.photo_url || record.photoUrl || '';
+  const candidateName = record.photo_name || record.file_name || '';
+  if (candidateUrl) return { url: candidateUrl, name: candidateName, local: false };
+  const isInspectionUpload = String(record.doc_type || record.docType || '').toLowerCase() === 'inspection';
+  const isImage = inferEvidenceMimeType(candidateName).startsWith('image/');
+  if (isInspectionUpload && isImage && record.file_url) return { url: record.file_url, name: candidateName, local: false };
+  return null;
+}
+
+function inspectionMatchesDocument(doc, record) {
+  const references = [doc.id, doc.reference, doc.doc_no, doc.file_name, doc.name].filter(Boolean).map(String);
+  const linkedReferences = [record.id, record.evidence_id, record.doc_no, record.docNo, record.riDocument?.id, record.riDocument?.document_id, record.riDocument?.reference, record.riDocument?.doc_no].filter(Boolean).map(String);
+  if (linkedReferences.some(value => references.includes(value))) return true;
+  const building = canonicalBuilding(record.building, record.floor);
+  const sameLocation = building === canonicalBuilding(doc.building, doc.floor) && String(record.floor) === String(doc.floor) && String(record.roomNumber || record.room) === String(doc.roomNumber || doc.room);
+  if (!sameLocation) return false;
+  const task = canonicalTask(record.task || record.trade || '');
+  const taskCategory = TASKS_13.includes(task) ? 'Architecture' : task;
+  return doc.category === task || doc.category === taskCategory;
+}
+
+function InspectionPhotoThumbnail({ record, labels, lang, t }) {
+  const [localUrl, setLocalUrl] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const photoSource = inspectionPhotoSource(record);
+  const remoteUrl = photoSource?.url || '';
+  const photoName = photoSource?.name || (lang === 'th' ? 'รูปตรวจงาน' : 'Inspection Photo');
+  useEffect(() => {
+    let active = true;
+    if (photoSource?.local && !remoteUrl) {
+      loadInspectionEvidence(record.evidence_id || record.id, 'photo').then(blob => {
+        if (active && blob) setLocalUrl(URL.createObjectURL(blob));
+      }).catch(error => console.warn('Could not load inspection photo evidence:', error));
+    }
+    return () => { active = false; };
+  }, [record.evidence_id, record.id, remoteUrl, photoSource?.local]);
+  useEffect(() => () => { if (localUrl) URL.revokeObjectURL(localUrl); }, [localUrl]);
+  const imageUrl = remoteUrl ? safeDriveImageUrl(remoteUrl) : localUrl;
+  if (failed) return <span className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400">{labels.noPhotoEvidence}</span>;
+  if (!imageUrl) return <span className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400">{labels.noPhotoEvidence}</span>;
+  return <><button type="button" onClick={() => setPreviewOpen(true)} title={labels.photoPreview} className="inline-flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-600 bg-slate-900"><img src={imageUrl} alt={photoName} loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" /></button>{previewOpen && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-3 sm:p-6" onClick={() => setPreviewOpen(false)}><section role="dialog" aria-modal="true" aria-label={labels.photoPreview} className="w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl" onClick={event => event.stopPropagation()}><header className="flex items-center justify-between gap-3 border-b border-slate-700 p-3"><div className="min-w-0"><h3 className="text-sm font-bold text-slate-100">{labels.photoPreview}</h3><p className="truncate text-[10px] text-slate-400">{photoName}</p></div><button type="button" onClick={() => setPreviewOpen(false)} aria-label={t.common.close}><X className="h-4 w-4 text-slate-300" /></button></header><div className="grid max-h-[76vh] min-h-40 place-items-center overflow-auto bg-slate-950 p-3"><img src={imageUrl} alt={photoName} onError={() => setFailed(true)} className="max-h-[72vh] max-w-full object-contain" /></div><footer className="flex justify-end gap-2 border-t border-slate-700 p-3">{remoteUrl && <a href={remoteUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-200">{labels.openFile}</a>}<a href={imageUrl} download={photoName} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">{labels.downloadPhoto}</a><button type="button" onClick={() => setPreviewOpen(false)} className="rounded-lg bg-slate-700 px-3 py-2 text-xs text-slate-200">{t.common.close}</button></footer></section></div>}</>;
+}
+
+function DocumentInspectionEvidence({ records, labels, t, lang }) {
+  const inspected = records.filter(isInspectionRecordComplete).sort((a, b) => String(b.date || b.updated_at || '').localeCompare(String(a.date || a.updated_at || '')));
+  const withPhotos = inspected.filter(record => inspectionPhotoSource(record));
+  if (!inspected.length) return <p className="mt-2 text-[10px] text-slate-500">{labels.notInspected}</p>;
+  return <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-300">✓ {labels.inspected}</span><span className="text-[10px] text-slate-400">{labels.inspectionStatus}: {inspected.map(record => t.status[record.status] || record.status || labels.inspected).join(', ')}</span></div>{withPhotos.length ? <><p className="mt-2 text-[10px] font-semibold text-slate-300">{labels.inspectionPhotoEvidence} · {withPhotos.map(record => effectiveDocumentDate({ date: record.date || record.inspection_date, updated_at: record.updated_at }) || '—').join(', ')}</p><div className="mt-2 flex flex-wrap gap-2">{withPhotos.map(record => <InspectionPhotoThumbnail key={`${record.id}-${record.photo?.name || record.file_name || ''}`} record={record} labels={labels} lang={lang} t={t} />)}</div></> : <p className="mt-2 text-[10px] text-slate-400">{labels.noPhotoEvidence}</p>}</div>;
+}
+
 // ==========================================
 // MODULE 5: DOCUMENT CENTER
 // ==========================================
-function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRecordSaved }) {
+function DocumentCenterView({ t, lang, showToast, rooms, inspections = [], canEdit, userName, onRecordSaved }) {
   const labels = t.documents;
   const sampleDocs = () => [
     { id: 'seed-1', name: 'Inspection_Report_Floor_4_Q3.pdf', reference: 'INS-2026-004', documentType: 'inspection', building: BUILDING_A, floor: '4', roomNumber: '401', category: 'Architecture', date: getLocalDateString(), status: 'completed', size: '3.4 MB' },
@@ -1550,10 +1612,14 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
   const lastCheckedDate = useRef(today);
   const [form, setForm] = useState({ documentType: 'general', building: BUILDING_A, floor: '1', roomNumber: '', category: 'Architecture', reference: '', scheduledDate: '', file: null });
   const [savingUpload, setSavingUpload] = useState(false);
+  const [photoCollectionMode, setPhotoCollectionMode] = useState(null);
   const [docFilters, setDocFilters] = useState(() => {
     const currentDate = getLocalDateString();
-    const defaults = { period: 'all', date: currentDate, week: currentIsoWeekValue(), month: currentDate.slice(0, 7), from: currentDate, to: currentDate, type: 'all', status: 'all', search: '' };
-    try { return { ...defaults, ...(JSON.parse(localStorage.getItem('trex-document-hub-filters') || '{}') || {}) }; }
+    const defaults = { period: 'exact', date: currentDate, reportWeek: currentIsoWeekValue(), reportMonth: currentDate.slice(0, 7), type: 'all', status: 'all', search: '' };
+    try {
+      const saved = JSON.parse(localStorage.getItem('trex-document-hub-filters') || '{}') || {};
+      return { ...defaults, ...saved, period: saved.period === 'all' ? 'all' : 'exact', date: saved.date || currentDate };
+    }
     catch { return defaults; }
   });
   const updateDocFilters = changes => setDocFilters(current => ({ ...current, ...changes }));
@@ -1620,24 +1686,16 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
   const dateInSelectedPeriod = doc => {
     const docDate = effectiveDocumentDate(doc);
     if (!docDate) return false;
-    if (docFilters.period === 'all') return true;
-    if (docFilters.period === 'today') return docDate === today;
-    if (docFilters.period === 'daily') return docDate === docFilters.date;
-    if (docFilters.period === 'monthly') return docDate.startsWith(docFilters.month);
-    if (docFilters.period === 'weekly') {
-      const [start, end] = isoWeekRange(docFilters.week);
-      return docDate >= start && docDate <= end;
-    }
-    if (docFilters.period === 'range') return Boolean(docFilters.from && docFilters.to && docFilters.from <= docFilters.to) && docDate >= docFilters.from && docDate <= docFilters.to;
-    return true;
+    return docFilters.period === 'all' || docDate === docFilters.date;
   };
   const normalizedSearch = docFilters.search.trim().toLocaleLowerCase();
-  const matchingDocs = docs.filter(doc => {
+  const passesDocumentFilters = doc => {
     const matchesType = docFilters.type === 'all' || doc.documentType === docFilters.type;
     const matchesStatus = docFilters.status === 'all' || lifecycle(doc) === docFilters.status;
     const searchable = `${doc.reference || ''} ${doc.name || ''} ${doc.file_name || ''} ${doc.building || ''} ${doc.floor || ''} ${doc.roomNumber || ''}`.toLocaleLowerCase();
-    return matchesType && matchesStatus && (!normalizedSearch || searchable.includes(normalizedSearch)) && dateInSelectedPeriod(doc);
-  });
+    return matchesType && matchesStatus && (!normalizedSearch || searchable.includes(normalizedSearch));
+  };
+  const matchingDocs = docs.filter(doc => passesDocumentFilters(doc) && dateInSelectedPeriod(doc));
 
   const resetPathTo = level => setPath(previous => ({ building: previous.building, floor: level === 'floor' || level === 'room' || level === 'category' ? previous.floor : null, room: level === 'room' || level === 'category' ? previous.room : null, category: level === 'category' ? previous.category : null }));
   const chooseBuilding = value => setPath({ building: value, floor: null, room: null, category: null });
@@ -1647,6 +1705,18 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
   const periodResultCount = matchingDocs.filter(doc => (!path.building || doc.building === path.building) && (!path.floor || String(doc.floor) === String(path.floor)) && (!path.room || String(doc.roomNumber) === String(path.room)) && (!path.category || doc.category === path.category)).length;
   const docsAtPath = matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === path.category)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.reference || '').localeCompare(String(b.reference || ''), undefined, { numeric: true }));
+  const inspectionsForDocument = doc => inspections.filter(record => inspectionMatchesDocument(doc, record));
+  const collectionRange = photoCollectionMode === 'weekly'
+    ? isoWeekRange(docFilters.reportWeek)
+    : photoCollectionMode === 'monthly'
+      ? [`${docFilters.reportMonth}-01`, getLocalDateString(new Date(Number(docFilters.reportMonth.slice(0, 4)), Number(docFilters.reportMonth.slice(5, 7)), 0))]
+      : ['', ''];
+  const reportCandidateDocs = docs.filter(doc => passesDocumentFilters(doc) && (!path.building || doc.building === path.building) && (!path.floor || String(doc.floor) === String(path.floor)) && (!path.room || String(doc.roomNumber) === String(path.room)) && (!path.category || doc.category === path.category));
+  const collectedPhotoRecords = photoCollectionMode ? inspections.filter(record => {
+    if (!inspectionPhotoSource(record) || !isInspectionRecordComplete(record)) return false;
+    const photoDate = effectiveDocumentDate({ date: record.date || record.inspection_date, updated_at: record.updated_at });
+    return photoDate >= collectionRange[0] && photoDate <= collectionRange[1] && reportCandidateDocs.some(doc => inspectionMatchesDocument(doc, record));
+  }).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))) : [];
 
   const openUpload = () => {
     const nextReference = `DOC-${today.slice(0, 4)}-${String(docs.length + 1).padStart(4, '0')}`;
@@ -1719,18 +1789,15 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/80 p-4"><div><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p></div>{canEdit && <button type="button" onClick={openUpload} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"><Upload className="h-4 w-4"/>{labels.upload}</button>}</header>
 
     <section aria-label={labels.timeFilter} className="rounded-xl border border-slate-700 bg-slate-800/70 p-3 sm:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-bold text-slate-100">{labels.timeFilter}</h3><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">{labels.showingPeriod(periodResultCount)}</span></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-bold text-slate-100">{labels.timeFilter}</h3><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">{labels.showingPeriod(periodResultCount, docFilters.period === 'all')}</span><button type="button" onClick={() => setPhotoCollectionMode('weekly')} className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-sky-200 hover:bg-sky-500/20">{labels.weeklyPhotos}</button><button type="button" onClick={() => setPhotoCollectionMode('monthly')} className="rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-violet-200 hover:bg-violet-500/20">{labels.monthlyPhotos}</button></div></div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.timeFilter}</span><select value={docFilters.period} onChange={event => updateDocFilters({ period: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100">{Object.entries(labels.dateModes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>
-        {docFilters.period === 'daily' && <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.date}</span><input type="date" value={docFilters.date} onChange={event => updateDocFilters({ date: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label>}
-        {docFilters.period === 'weekly' && <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.dateModes.weekly}</span><input type="week" value={docFilters.week} onChange={event => updateDocFilters({ week: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label>}
-        {docFilters.period === 'monthly' && <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.dateModes.monthly}</span><input type="month" value={docFilters.month} onChange={event => updateDocFilters({ month: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label>}
-        {docFilters.period === 'range' && <><label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.fromDate}</span><input type="date" value={docFilters.from} onChange={event => updateDocFilters({ from: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label><label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.toDate}</span><input type="date" min={docFilters.from || undefined} value={docFilters.to} onChange={event => updateDocFilters({ to: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" /></label></>}
+        <div className="space-y-1"><span className="block text-[10px] font-semibold text-slate-300">{labels.timeFilter}</span><div className="flex rounded-lg border border-slate-600 bg-slate-900 p-1"><button type="button" aria-pressed={docFilters.period === 'exact'} onClick={() => updateDocFilters({ period: 'exact' })} className={`flex-1 rounded-md px-2 py-2 text-[10px] font-semibold ${docFilters.period === 'exact' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>{labels.exactDateOnly}</button><button type="button" aria-pressed={docFilters.period === 'all'} onClick={() => updateDocFilters({ period: 'all' })} className={`flex-1 rounded-md px-2 py-2 text-[10px] font-semibold ${docFilters.period === 'all' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>{labels.allDates}</button></div></div>
+        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.selectedDate}</span><input type="date" value={docFilters.date} onChange={event => updateDocFilters({ date: event.target.value, period: 'exact' })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100" /></label>
         <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.typeFilter}</span><select value={docFilters.type} onChange={event => updateDocFilters({ type: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="all">{labels.allTypes}</option><option value="general">{labels.typeGeneral}</option><option value="ri">{labels.typeRI}</option><option value="inspection">{labels.typeInspection}</option><option value="defect">{labels.typeDefect}</option></select></label>
         <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.statusFilter}</span><select value={docFilters.status} onChange={event => updateDocFilters({ status: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="all">{labels.allStatuses}</option><option value="pending">{labels.statusPending}</option><option value="completed">{labels.statusCompleted}</option><option value="expired">{labels.statusExpired}</option><option value="archived">{labels.statusArchived}</option></select></label>
         <label className="space-y-1 text-[10px] font-semibold text-slate-300 sm:col-span-2"><span>{labels.searchDocuments}</span><input type="search" value={docFilters.search} onChange={event => updateDocFilters({ search: event.target.value })} placeholder={labels.searchDocuments} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500" /></label>
       </div>
-      {docFilters.period !== 'all' && <div className="mt-3 flex justify-end"><button type="button" onClick={() => updateDocFilters({ period: 'all', date: today, week: currentIsoWeekValue(), month: today.slice(0, 7), from: today, to: today })} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700">{labels.resetDateFilter}</button></div>}
+      {docFilters.period === 'all' && <div className="mt-3 flex justify-end"><button type="button" onClick={() => updateDocFilters({ period: 'exact' })} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700">{labels.resetDateFilter}</button></div>}
     </section>
 
     <nav aria-label={lang === 'th' ? 'ลำดับตำแหน่งเอกสาร' : 'Document location hierarchy'} className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/70 p-3 text-xs">
@@ -1740,13 +1807,16 @@ function DocumentCenterView({ t, lang, showToast, rooms, canEdit, userName, onRe
     {!path.category ? <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{drillItems.map(item => <button type="button" key={item.value} onClick={() => selectDrillItem(item.value)} className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/70 p-4 text-left hover:border-emerald-500/60 hover:bg-slate-800"><span className="flex min-w-0 items-center gap-3"><FolderKanban className="h-5 w-5 shrink-0 text-emerald-400"/><b className="truncate text-sm text-slate-100">{item.label}</b></span><span className="shrink-0 rounded-full bg-slate-900 px-2 py-1 text-[10px] text-slate-400">{item.count}</span></button>)}</section>
       : <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 p-4"><h3 className="text-sm font-bold text-slate-100">{displayBuilding(path.building)} · {labels.floor} {path.floor} · {labels.room} {path.room} · {displayCategory(path.category)}</h3><span className="text-[10px] text-slate-400">{labels.referenceNumber} / {labels.date}</span></div>
-        {!docsAtPath.length ? <div className="p-6 text-center text-xs text-slate-400"><p>{docFilters.period !== 'all' ? labels.emptyPeriod : (docFilters.type !== 'all' || docFilters.status !== 'all' || normalizedSearch) ? labels.emptyFiltered : labels.empty}</p>{docFilters.period !== 'all' && <button type="button" onClick={() => updateDocFilters({ period: 'all', date: today, week: currentIsoWeekValue(), month: today.slice(0, 7), from: today, to: today })} className="mt-3 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 font-semibold text-emerald-300 hover:bg-slate-700">{labels.resetDateFilter}</button>}</div> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
+        {!docsAtPath.length ? <div className="p-6 text-center text-xs text-slate-400"><p>{docFilters.period !== 'all' ? labels.emptyPeriod : (docFilters.type !== 'all' || docFilters.status !== 'all' || normalizedSearch) ? labels.emptyFiltered : labels.empty}</p>{docFilters.period !== 'all' && <button type="button" onClick={() => updateDocFilters({ period: 'all' })} className="mt-3 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 font-semibold text-emerald-300 hover:bg-slate-700">{labels.resetDateFilter}</button>}</div> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
           const status = lifecycle(doc);
-          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.file_url && inferEvidenceMimeType(doc.file_name || doc.name).startsWith('image/') && <DriveImageThumbnail key={`${doc.id}:${doc.file_url}`} fileUrl={doc.file_url} fileName={doc.file_name || doc.name} label={labels.openFile} />}{doc.file_url && <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-sky-300 underline">{labels.openFile}</a>}{doc.folder_path && <p className="mt-1 break-all text-[10px] text-slate-500">{labels.folderPath}: {doc.folder_path}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}</div></div>
+          const matchingInspections = inspectionsForDocument(doc);
+          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.file_url && inferEvidenceMimeType(doc.file_name || doc.name).startsWith('image/') && <DriveImageThumbnail key={`${doc.id}:${doc.file_url}`} fileUrl={doc.file_url} fileName={doc.file_name || doc.name} label={labels.openFile} />}{doc.file_url && <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-sky-300 underline">{labels.openFile}</a>}{doc.folder_path && <p className="mt-1 break-all text-[10px] text-slate-500">{labels.folderPath}: {doc.folder_path}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}<DocumentInspectionEvidence records={matchingInspections} labels={labels} t={t} lang={lang} /></div></div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status === 'expired' ? 'bg-red-500/15 text-red-300' : status === 'completed' ? 'bg-emerald-500/15 text-emerald-300' : status === 'archived' ? 'bg-slate-600/30 text-slate-300' : 'bg-amber-500/15 text-amber-300'}`}>{displayStatus(status)}</span><button type="button" onClick={() => handlePreview(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={labels.documentPreview} title={labels.documentPreview}><Eye className="h-4 w-4"/></button><button type="button" onClick={() => handleDownload(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={t.common.export} title={t.common.export}><Download className="h-4 w-4"/></button>{canEdit && status === 'pending' && doc.documentType === 'ri' && <button type="button" onClick={() => markComplete(doc)} className="rounded-md bg-emerald-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-emerald-600">{labels.markComplete}</button>}{canEdit && status === 'expired' && <button type="button" onClick={() => { setReasonDoc(doc); setReasonText(doc.reasonReport || ''); }} className="rounded-md bg-red-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-red-600">{labels.archive}</button>}</div>
           </article>;
         })}</div>}
       </section>}
+
+    {photoCollectionMode && <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-3 sm:p-6" onClick={() => setPhotoCollectionMode(null)}><section role="dialog" aria-modal="true" aria-label={labels.collectedPhotos} className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-800 shadow-2xl" onClick={event => event.stopPropagation()}><header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 p-4"><div><h2 className="text-sm font-bold text-slate-100">{labels.collectedPhotos}</h2><p className="mt-1 text-[10px] text-slate-400">{labels.photoCollectionHelp}</p></div><button type="button" onClick={() => setPhotoCollectionMode(null)} aria-label={t.common.close} className="rounded-lg bg-slate-700 p-2 text-slate-200"><X className="h-4 w-4" /></button></header><div className="flex flex-wrap items-center gap-2 border-b border-slate-700 p-3"><button type="button" onClick={() => setPhotoCollectionMode('weekly')} className={`rounded-md px-3 py-2 text-xs font-semibold ${photoCollectionMode === 'weekly' ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300'}`}>{labels.weeklyPhotos}</button><button type="button" onClick={() => setPhotoCollectionMode('monthly')} className={`rounded-md px-3 py-2 text-xs font-semibold ${photoCollectionMode === 'monthly' ? 'bg-violet-700 text-white' : 'bg-slate-900 text-slate-300'}`}>{labels.monthlyPhotos}</button>{photoCollectionMode === 'weekly' ? <label className="ml-auto flex items-center gap-2 text-[10px] text-slate-300">{labels.weeklyRange}<input type="week" value={docFilters.reportWeek} onChange={event => updateDocFilters({ reportWeek: event.target.value })} className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100" /></label> : <label className="ml-auto flex items-center gap-2 text-[10px] text-slate-300">{labels.monthlyRange}<input type="month" value={docFilters.reportMonth} onChange={event => updateDocFilters({ reportMonth: event.target.value })} className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100" /></label>}<span className="rounded-full bg-emerald-500/10 px-3 py-2 text-[10px] font-semibold text-emerald-300">{labels.photoCount(collectedPhotoRecords.length)}</span><button type="button" disabled={!collectedPhotoRecords.length} onClick={() => downloadFile(JSON.stringify(collectedPhotoRecords.map(record => ({ id: record.id, building: record.building, floor: record.floor, room: record.roomNumber, task: taskLabel(record.task || record.trade, lang), status: record.status, inspectedAt: record.date || record.updated_at || '', inspector: record.inspector || '', photoName: record.photo?.name || '', photoUrl: record.photo?.file_url || record.file_url || '', docReference: reportCandidateDocs.find(doc => inspectionMatchesDocument(doc, record))?.reference || '' })), null, 2), `inspection-photos-${photoCollectionMode === 'weekly' ? docFilters.reportWeek : docFilters.reportMonth}.json`, 'application/json')} className="rounded-md bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{t.common.export}</button></div><div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">{collectedPhotoRecords.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{collectedPhotoRecords.map(record => { const linkedDoc = reportCandidateDocs.find(doc => inspectionMatchesDocument(doc, record)); return <article key={record.id} className="rounded-xl border border-slate-700 bg-slate-900/70 p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-100">{linkedDoc?.reference || linkedDoc?.name || `${labels.room} ${record.roomNumber}`}</p><p className="mt-1 text-[10px] text-slate-400">{record.building} · {labels.floor} {record.floor} · {labels.room} {record.roomNumber}</p><p className="mt-1 text-[10px] text-slate-300">{taskLabel(record.task || record.trade, lang)} · {record.date || record.updated_at || '—'}</p></div><StatusBadge status={record.status} t={t} /></div><div className="mt-3"><InspectionPhotoThumbnail record={record} labels={labels} lang={lang} t={t} /></div></article>; })}</div> : <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-slate-700 text-center text-xs text-slate-400">{labels.noReportPhotos}</div>}</div></section></div>}
 
     {uploadOpen && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-3 sm:p-5"><form onSubmit={submitUpload} className="my-auto max-h-[95vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-800 p-4 shadow-2xl sm:p-6"><div className="flex items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-100">{labels.upload}</h3><button type="button" onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 p-2 text-slate-300" aria-label={t.common.close}><X className="h-4 w-4"/></button></div>
       <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs text-slate-300"><span>{labels.type}</span><select value={form.documentType} onChange={event => setForm(current => ({ ...current, documentType: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="general">{labels.typeGeneral}</option><option value="ri">{labels.typeRI}</option><option value="inspection">{labels.typeInspection}</option><option value="defect">{labels.typeDefect}</option></select></label>
