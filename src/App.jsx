@@ -1,2139 +1,363 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import roomPlanImage from './assets/room-plan-reference.jpg';
-import { 
-  Building2, LayoutDashboard, Grid, ClipboardCheck, History, FolderKanban, 
-  Bot, CheckCircle2, AlertTriangle, Clock, Search, 
-  Upload, Mic, FileText, Download, Eye, Languages, 
-  Bell, Sparkles, X, FileSpreadsheet, Menu, LogOut,
-  Camera, FileDown as FilePdf
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './App.css';
+import {
+  Activity, AlertTriangle, ArrowRight, Bell, Building2, CalendarDays,
+  Camera, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
+  ClipboardCheck, Clock3, Download, Eye, FileCheck2, FilePlus2, FileText,
+  FolderOpen, Home, LogOut, MapPin, Menu, Pencil, Plus, Printer, Search,
+  Send, ShieldCheck, Trash2, Upload, X,
 } from 'lucide-react';
 
-const HISTORY_LOG_CACHE_KEY = 'trex_history_log_cache';
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const HISTORY_LOG_FIELDS = ['id', 'building', 'floor', 'room', 'trade', 'doc_no', 'doc_type', 'appointment_date', 'status', 'reason', 'file_name', 'file_url', 'folder_path', 'updated_at'];
-const BUILDING_A = 'อาคาร A';
-const BUILDING_B = 'อาคาร B';
-const BUILDING_VALUES = [BUILDING_A, BUILDING_B];
-const PROJECT_BUILDING_NAME = BUILDING_A;
-const FLOORS = [1, 2, 3, 4, 5, 6, 7, 8];
-const PROJECT_OPTIONS = [
-  { id: '00428', name: 'Boutique Bangkok Sukhumvit 5' },
-  { id: '00434', name: 'Reference Kaset District' },
-  { id: '00446', name: 'Plum Condo Ladprao' },
+const STORE = 'trex-site-prototype-v1';
+const PROJECTS = [
+  { id: 'PJ00888', name: 'T-REX HOUSE', location: 'กรุงเทพมหานคร · Bangkok', rooms: 144, floors: 8, featured: true },
+  { id: 'PJ00440', name: 'Chapter Charoenkrung - Riverside', location: 'เจริญกรุง · Bangkok', rooms: 216, floors: 12 },
+  { id: 'PJ00442', name: 'Siam Pan Pacific Hotel', location: 'สาทร · Bangkok', rooms: 186, floors: 10 },
+  { id: 'PJ00446', name: 'Plum Condo Ladprao', location: 'ลาดพร้าว · Bangkok', rooms: 320, floors: 8 },
 ];
-
-function canonicalBuilding(value, floor = '') {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === BUILDING_B.toLowerCase() || normalized === 'building b' || normalized === 'annex' || normalized === 'annex building' || normalized === 'อาคารส่วนต่อขยาย') return BUILDING_B;
-  if (normalized === BUILDING_A.toLowerCase() || normalized === 'building a' || normalized === 'main' || normalized === 'main building' || normalized === 'อาคารหลัก' || normalized === 'boutique bangkok sukhumvit 5') return BUILDING_A;
-  if (value) return BUILDING_A;
-  return Number(floor) >= 5 ? BUILDING_B : BUILDING_A;
-}
-
-function canonicalizeRooms(rooms) {
-  return rooms.map(room => ({ ...room, building: canonicalBuilding(room.building, room.floor), tasks: Object.fromEntries(Object.entries(room.tasks || {}).map(([task, status]) => [canonicalTask(task), status])) }));
-}
-
-// --- DICTIONARY FOR BILINGUAL SUPPORT ---
-const i18n = {
-  th: {
-    appName: "T-REX Platform",
-    subTitle: "Tracking & Reporting Expert System",
-    projectTitle: "Boutique Bangkok Sukhumvit 5",
-    siteEngineer: "นายธนโชค ซี. (Site Engineer)",
-    auth: {
-      title: "เข้าสู่ระบบ T-REX", subtitle: "ระบบติดตามและจัดการงานก่อสร้าง", name: "ชื่อผู้ใช้งาน", namePlaceholder: "กรอกชื่อของคุณ", project: "เลือกโครงการ",
-      role: "เลือกบทบาท", engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", login: "เข้าสู่ระบบ", language: "ภาษา",
-      engineerAccess: "จัดการการตรวจ เอกสาร สถานะ และรายงานได้", viewerAccess: "ดูแดชบอร์ด ผังชั้น ประวัติ และเอกสารได้เท่านั้น"
-    },
-    role: { engineer: "วิศวกรประจำไซต์", viewer: "ผู้ชม / บุคคลทั่วไป", logout: "ออกจากระบบ", activeUser: "ผู้ใช้งานปัจจุบัน" },
-    storage: { fileTooLarge: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB", uploadFailed: "บันทึกไฟล์ในอุปกรณ์ไม่สำเร็จ", saving: "กำลังบันทึก..." },
-    documents: {
-      title: "ศูนย์เอกสารโครงการ", subtitle: "เลือกตามอาคาร ชั้น ห้อง และหมวดงานเพื่อดูเอกสาร",
-      upload: "อัปโหลดเอกสาร", type: "ประเภทเอกสาร", typeGeneral: "เอกสารทั่วไป", typeRI: "Request for Inspection (RI)", typeInspection: "รายงานการตรวจ", typeDefect: "รายงานข้อบกพร่อง",
-      scheduledDate: "วันที่นัดตรวจ", reference: "เลขที่เอกสาร", building: "อาคาร", floor: "ชั้น", room: "ห้อง", category: "หมวดงาน", file: "เลือกไฟล์",
-      cancel: "ยกเลิก", save: "บันทึกเอกสาร", required: "กรุณากรอกข้อมูลที่จำเป็น", empty: "ไม่พบเอกสารในตำแหน่งนี้",
-      chooseBuilding: "เลือกอาคาร", chooseFloor: "เลือกชั้น", chooseRoom: "เลือกห้อง", chooseCategory: "เลือกหมวดงาน",
-      architecture: "สถาปัตยกรรม", mep: "ระบบประกอบอาคาร (MEP)", structure: "โครงสร้าง", referenceNumber: "เลขที่อ้างอิง", date: "วันที่เอกสาร", statusLabel: "สถานะ",
-      statusPending: "รอตรวจ", statusCompleted: "ตรวจแล้ว", statusExpired: "หมดอายุ", statusArchived: "จัดเก็บแล้ว", markComplete: "ทำเครื่องหมายว่าตรวจแล้ว",
-      morningWarning: "แจ้งเตือนรอบเช้า: มีเอกสาร RI ถึงกำหนดและยังไม่ได้ตรวจ", dueToday: "ถึงกำหนดวันนี้", reminderDay: "วันที่ {day} หลังวันนัด",
-      expiredTitle: "รายงานเหตุผลที่ไม่ได้เข้าตรวจ", expiredDescription: "เอกสาร RI หมดอายุ กรุณาระบุเหตุผลก่อนจัดเก็บเอกสาร",
-      reasonLabel: "เหตุผลที่ไม่ได้เข้าตรวจ", reasonPlaceholder: "อธิบายเหตุผลที่ไม่ได้เข้าตรวจ...", archive: "บันทึกเหตุผลและจัดเก็บ",
-      archivedReason: "เหตุผลที่จัดเก็บ", documentPreview: "ตัวอย่างเอกสาร", uploaded: "อัปโหลดเอกสารแล้ว", allLevels: "ทั้งหมด",
-      buildingName: "อาคาร A", buildingA: "อาคาร A", buildingB: "อาคาร B", workCategories: ["สถาปัตยกรรม", "ระบบประกอบอาคาร (MEP)", "โครงสร้าง"], openFile: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์",
-      timeFilter: "ตัวกรองวันที่", exactDateOnly: "เฉพาะวันที่เลือก", allDates: "ทุกวัน", selectedDate: "วันที่เลือก", resetDateFilter: "กลับไปวันที่เลือก", showingPeriod: (count, all = false) => all ? `แสดง ${count} เอกสารจากทุกวัน` : `แสดง ${count} เอกสารตามวันที่เลือก`, emptyPeriod: "ไม่พบเอกสารในวันที่เลือก", typeFilter: "ประเภทเอกสาร", allTypes: "ทุกประเภท", statusFilter: "สถานะ", allStatuses: "ทุกสถานะ", searchDocuments: "ค้นหาเลขอ้างอิงหรือชื่อเอกสาร...", emptyFiltered: "ไม่พบเอกสารตามตัวกรองที่เลือก",
-      inspected: "ตรวจแล้ว", notInspected: "ยังไม่ตรวจ", inspectionPhotoEvidence: "รูปประกอบการตรวจงาน", noPhotoEvidence: "ไม่มีรูปประกอบ", inspectionStatus: "สถานะการตรวจ", inspectionDate: "วันที่ตรวจ", photoPreview: "ตัวอย่างรูปประกอบการตรวจงาน", weeklyPhotos: "รูปรายสัปดาห์", monthlyPhotos: "รูปรายเดือน", collectedPhotos: "รูปตรวจงานสำหรับรายงาน", photoCollectionHelp: "รวมรูปจากรายการตรวจที่มีหลักฐานตามช่วงเวลาที่เลือก", noReportPhotos: "ไม่มีรูปตรวจงานในช่วงเวลานี้", downloadPhoto: "ดาวน์โหลดรูป", weeklyRange: "สัปดาห์ที่เลือก", monthlyRange: "เดือนที่เลือก", photoCount: count => `${count} รูป`
-    },
-    records: {
-      title: "ประวัติการตรวจแยกตามหมวดงาน", subtitle: "จัดกลุ่มตามงานตรวจ แล้วแยกตามอาคาร ชั้น และห้อง",
-      allCategories: "ทุกหมวดงาน", noRecords: "ยังไม่มีประวัติการตรวจในหมวดงานนี้", building: "อาคาร", floor: "ชั้น", room: "ห้อง",
-      inspectionDate: "วันที่ตรวจ", inspector: "ผู้ตรวจ", result: "ผลตรวจ", openRoom: "ดูรายละเอียดห้อง", roomCount: "{count} ห้อง", recordCount: "{count} รายการ", fileLink: "เปิดไฟล์ใน Google Drive", folderPath: "ตำแหน่งโฟลเดอร์",
-      viewPhotos: "ดูรูปภาพ", viewRiDocument: "ดูเอกสาร RI", evidencePreview: "ตัวอย่างหลักฐาน", evidenceUnavailable: "ไม่พบไฟล์หลักฐานในอุปกรณ์นี้หรือ Google Drive", evidenceError: "เปิดไฟล์หลักฐานไม่สำเร็จ กรุณาลองใหม่"
-    },
-    nav: {
-      dashboard: "แดชบอร์ดสรุปผล",
-      floorStatus: "สถานะรายชั้นและการส่งมอบ",
-      newInspection: "บันทึกการตรวจงาน",
-      inspectionRecords: "ประวัติการตรวจ 13 งาน",
-      documentCenter: "ศูนย์เอกสารโครงการ",
-      aiAssistant: "AI ผู้ช่วยวิเคราะห์",
-      handover: "สถานะการส่งมอบห้องพัก"
-    },
-    metrics: {
-      totalRooms: "ห้องพักทั้งหมด",
-      passedRooms: "ผ่านมาตรฐานแล้ว",
-      defectsFound: "พบข้อบกพร่อง (Defects)",
-      pendingInspection: "รอการตรวจเช็ค"
-    },
-    dashboard: {
-      title: "Dashboard",
-      projectSubtitle: "Boutique Bangkok Sukhumvit 5 · Hotel Project",
-      liveSync: "ซิงก์ข้อมูลสด | อัปเดตล่าสุด: ตอนนี้",
-      totalRooms: "ห้องพักทั้งหมด",
-      passed: "ผ่านการตรวจ",
-      failed: "ไม่ผ่าน",
-      readyForInspection: "รอตรวจ",
-      notSubmitted: "ยังไม่ส่งตรวจ",
-      floorStatus: "สถานะการตรวจแยกตามชั้น",
-      resultSummary: "สรุปผลการตรวจ",
-      criticalRooms: "ห้องที่ต้องแก้ไขเร่งด่วน",
-      room: "ห้อง",
-      legend: { passed: "ผ่าน", failed: "ไม่ผ่าน", ready: "รอตรวจ", pending: "ยังไม่ส่งตรวจ" },
-      defects: ["วาล์วน้ำหาย", "ปัญหาระบบประปา", "ฝ้าเพดานชำรุด", "ระบบไฟฟ้าขัดข้อง", "ฝ้าแตกร้าว", "ขอบฉากกั้นอาบน้ำมีช่องว่าง"]
-    },
-    form: {
-      room: "เลือกห้องพัก", task: "รายการตรวจ (13 งาน)", result: "ผลการตรวจ", inspector: "ชื่อผู้ตรวจงาน",
-      passed: "ผ่าน", defect: "พบข้อบกพร่อง", inProgress: "รอตรวจ/กำลังแก้ไข",
-      roomOption: (room, floor, building) => `${building} · ห้อง ${room} (ชั้น ${floor})`,
-      inspectionTitle: "ฟอร์มบันทึกการตรวจงาน", photo: "แนบภาพถ่ายหน้างาน", remarks: "หมายเหตุ / รายละเอียดการตรวจ",
-      voice: "บันทึกเสียง", recording: "กำลังบันทึกเสียง...", submit: "บันทึกผลการตรวจ"
-    },
-    status: {
-      ready: "พร้อมส่งมอบ",
-      inProgress: "กำลังดำเนินการ",
-      defect: "มีข้อบกพร่อง",
-      pending: "รอดำเนินการ",
-      passed: "ผ่านการตรวจ",
-      rejected: "ไม่ผ่าน",
-      completed: "เสร็จสิ้น"
-    },
-    common: {
-      search: "ค้นหาห้องพัก หรือ เอกสาร...",
-      floor: "ชั้น",
-      room: "ห้อง",
-      actions: "การจัดการ",
-      details: "ดูรายละเอียด",
-      edit: "แก้ไขข้อมูล",
-      close: "ปิดหน้าต่าง",
-      save: "บันทึกข้อมูล",
-      export: "ส่งออกรายงาน",
-      filterAll: "ทั้งหมด",
-      selectFloor: "เลือกชั้น",
-      trade: "หมวดหมู่ช่าง",
-      date: "วันที่",
-      inspector: "ผู้ตรวจงาน",
-      confirm: "ยืนยัน"
-    }
-  },
-  en: {
-    appName: "T-REX Platform",
-    subTitle: "Tracking & Reporting Expert System",
-    projectTitle: "Boutique Bangkok Sukhumvit 5",
-    siteEngineer: "Tanachock C. (Site Engineer)",
-    auth: {
-      title: "Sign in to T-REX", subtitle: "Construction tracking and management platform", name: "Your name", namePlaceholder: "Enter your name", project: "Select Project",
-      role: "Choose a role", engineer: "Site Engineer", viewer: "Viewer / Guest", login: "Sign in", language: "Language",
-      engineerAccess: "Manage inspections, documents, statuses, and reports", viewerAccess: "View dashboard, floor map, records, and documents only"
-    },
-    role: { engineer: "Site Engineer", viewer: "Viewer / Guest", logout: "Log out", activeUser: "Signed in as" },
-    storage: { fileTooLarge: "File size must be 5 MB or smaller", uploadFailed: "Could not save the file on this device", saving: "Saving..." },
-    documents: {
-      title: "Project Document Hub", subtitle: "Drill down by building, floor, room, and work category",
-      upload: "Upload Document", type: "Document Type", typeGeneral: "General Document", typeRI: "Request for Inspection (RI)", typeInspection: "Inspection Report", typeDefect: "Defect Report",
-      scheduledDate: "Scheduled Inspection Date", reference: "Document Reference", building: "Building", floor: "Floor", room: "Room", category: "Work Category", file: "Choose File",
-      cancel: "Cancel", save: "Save Document", required: "Please complete the required fields", empty: "No documents at this location",
-      chooseBuilding: "Choose Building", chooseFloor: "Choose Floor", chooseRoom: "Choose Room", chooseCategory: "Choose Work Category",
-      architecture: "Architecture", mep: "MEP", structure: "Structure", referenceNumber: "Reference Number", date: "Document Date", statusLabel: "Status",
-      statusPending: "Pending Inspection", statusCompleted: "Completed", statusExpired: "Expired", statusArchived: "Archived", markComplete: "Mark inspected",
-      morningWarning: "Morning reminder: RI documents are due and have not been inspected", dueToday: "Due today", reminderDay: "Day {day} after scheduled date",
-      expiredTitle: "Non-Inspection Reason Report", expiredDescription: "This RI document has expired. Enter the reason before archiving it.",
-      reasonLabel: "Reason for missed inspection", reasonPlaceholder: "Explain why the inspection was missed...", archive: "Save reason and archive",
-      archivedReason: "Archive reason", documentPreview: "Document Preview", uploaded: "Document uploaded", allLevels: "All",
-      buildingName: "Building A", buildingA: "Building A", buildingB: "Building B", workCategories: ["Architecture", "MEP", "Structure"], openFile: "Open file in Google Drive", folderPath: "Drive folder",
-      timeFilter: "Filter by Date", exactDateOnly: "Selected Date Only", allDates: "All Dates", selectedDate: "Selected date", resetDateFilter: "Back to Selected Date", showingPeriod: (count, all = false) => all ? `Showing ${count} documents across all dates` : `Showing ${count} documents for selected date`, emptyPeriod: "No documents found on the selected date", typeFilter: "Document Type", allTypes: "All Types", statusFilter: "Status", allStatuses: "All Statuses", searchDocuments: "Search reference or document name...", emptyFiltered: "No documents match the selected filters",
-      inspected: "Inspected", notInspected: "Not Inspected", inspectionPhotoEvidence: "Inspection Photo Evidence", noPhotoEvidence: "No Photo Evidence", inspectionStatus: "Inspection Status", inspectionDate: "Inspection Date", photoPreview: "Inspection Photo Preview", weeklyPhotos: "Weekly Photos", monthlyPhotos: "Monthly Photos", collectedPhotos: "Collected Inspection Photos for Report", photoCollectionHelp: "Inspection records with attached photo evidence for the selected period", noReportPhotos: "No inspection photos found for this period", downloadPhoto: "Download Photo", weeklyRange: "Selected week", monthlyRange: "Selected month", photoCount: count => `${count} photos`
-    },
-    records: {
-      title: "Inspection History by Work Category", subtitle: "Grouped by inspection task, then by building, floor, and room",
-      allCategories: "All Categories", noRecords: "No inspection history for this category", building: "Building", floor: "Floor", room: "Room",
-      inspectionDate: "Inspection Date", inspector: "Inspector", result: "Result", openRoom: "View Room Details", roomCount: "{count} rooms", recordCount: "{count} records", fileLink: "Open file in Google Drive", folderPath: "Drive folder",
-      viewPhotos: "View Photos", viewRiDocument: "View RI Document", evidencePreview: "Evidence Preview", evidenceUnavailable: "Evidence is not available on this device or in Google Drive", evidenceError: "Could not open the evidence file. Please try again."
-    },
-    nav: {
-      dashboard: "Executive Dashboard",
-      floorStatus: "Floor & Handover Status",
-      newInspection: "Room Inspection Form",
-      inspectionRecords: "13-Task Timeline",
-      documentCenter: "Document Hub",
-      aiAssistant: "AI Workbench",
-      handover: "Handover Heatmap"
-    },
-    metrics: {
-      totalRooms: "Total Rooms",
-      passedRooms: "Passed & Ready",
-      defectsFound: "Active Defects",
-      pendingInspection: "Pending Inspections"
-    },
-    dashboard: {
-      title: "Dashboard",
-      projectSubtitle: "Boutique Bangkok Sukhumvit 5 · Hotel Project",
-      liveSync: "Live Sync | Last updated: Just now",
-      totalRooms: "Total Rooms",
-      passed: "Passed Rooms",
-      failed: "Failed Rooms",
-      readyForInspection: "Ready for Inspection",
-      notSubmitted: "Not Submitted",
-      floorStatus: "Inspection Status by Floor",
-      resultSummary: "Inspection Result Summary",
-      criticalRooms: "Critical Rooms",
-      room: "Room",
-      legend: { passed: "Passed", failed: "Failed", ready: "Ready for Inspection", pending: "Not Submitted" },
-      defects: ["Missing Mix Valve", "Plumbing Issue", "Ceiling Defect", "Electrical Fault", "Ceiling Board Crack", "Shower Screen Gap"]
-    },
-    form: {
-      room: "Select Room", task: "Inspection Item (13 Tasks)", result: "Inspection Result", inspector: "Inspector Name",
-      passed: "Passed", defect: "Defect Found", inProgress: "Ready / In Progress",
-      roomOption: (room, floor, building) => `${building} · Room ${room} (Floor ${floor})`,
-      inspectionTitle: "Room Inspection Form", photo: "Attach Site Photo", remarks: "Remarks / Inspection Details",
-      voice: "Voice Note", recording: "Recording...", submit: "Submit Inspection Result"
-    },
-    status: {
-      ready: "Ready for Handover",
-      inProgress: "In Progress",
-      defect: "Defect Found",
-      pending: "Pending",
-      passed: "Passed",
-      rejected: "Needs Rework",
-      completed: "Completed"
-    },
-    common: {
-      search: "Search rooms or documents...",
-      floor: "Floor",
-      room: "Room",
-      actions: "Actions",
-      details: "View Details",
-      edit: "Edit",
-      close: "Close",
-      save: "Save Changes",
-      export: "Export Report",
-      filterAll: "All",
-      selectFloor: "Select Floor",
-      trade: "Trade",
-      date: "Date",
-      inspector: "Inspector",
-      confirm: "Confirm"
-    }
-  }
+const WORK_TYPES = ['งานก่ออิฐ-ฉาบ', 'งานกันซึม', 'งานปูกระเบื้อง', 'งานฝ้าเพดาน', 'งานทาสี', 'งานประตู-หน้าต่าง', 'งานสุขภัณฑ์', 'งานเก็บรายละเอียด'];
+const CHECKLIST = ['แนวผนังและระดับ', 'ผิวฉาบและมุม', 'รอยแตกร้าว', 'ความเรียบร้อยของพื้นที่'];
+const ROOM_IDS = Array.from({ length: 18 }, (_, i) => `${Math.floor(i / 9) + 1}${String((i % 9) + 1).padStart(2, '0')}`);
+const STATUS = {
+  Pass: { label: 'Pass', color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+  Fail: { label: 'Fail', color: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500' },
+  Scheduled: { label: 'Scheduled', color: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
+  'Partially Inspected': { label: 'Partially Inspected', color: 'bg-sky-100 text-sky-700', dot: 'bg-sky-500' },
+  Completed: { label: 'Completed', color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+  Pending: { label: 'Pending', color: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
 };
-
-// Localize text nodes and common accessibility/placeholder labels throughout every view.
-const bilingualPairs = [
-  ["8 Floors • 216 Rooms", "8 ชั้น • 216 ห้อง"], ["Online • Site Active", "ออนไลน์ • กำลังปฏิบัติงาน"],
-  ["Room Inspection List", "รายการตรวจห้องพัก"], ["รายชื่อห้องพัก", "Room Inspection List"],
-  ["ประเภทห้อง", "Room Type"], ["ความคืบหน้า (13 งาน)", "Progress (13 Tasks)"], ["การจัดการ", "Actions"],
-  ["แสดงผล ", "Showing "], [" ห้อง", " rooms"], ["ชั้น ", "Floor "], ["ผังแสดงสถานะห้องพักรายชั้น", "Floor and Handover Status"],
-  ["คลิกที่ห้องพักเพื่อตรวจเช็คสถานะละเอียด", "Select a room to inspect its status and details"],
-  ["ทั้งหมด", "All"], ["ห้อง ", "Room "], ["ชั้น", "Floor"], ["Progress", "ความคืบหน้า"],
-  ["ฟอร์มบันทึกการตรวจงาน", "Room Inspection Form"], ["บันทึกผลการตรวจสอบ 13 งาน พร้อมระบบ AI ช่วยวิเคราะห์รูปภาพและบันทึกเสียง", "Record results for the 13 inspection tasks, with simulated image analysis and voice notes"],
-  ["เลือกห้องพัก", "Select Room"], ["รายการตรวจ (13 งาน)", "Inspection Item (13 Tasks)"], ["ผลการตรวจ", "Inspection Result"],
-  ["ชื่อผู้ตรวจงาน", "Inspector Name"], ["แนบภาพถ่ายหน้างาน", "Attach Site Photo"], ["รองรับ PNG, JPG พร้อม AI ประเมินคุณภาพภาพ", "PNG and JPG supported. Image quality check is simulated."],
-  ["ความคมชัด:", "Clarity:"], ["สถานะ:", "Status:"], ["ภาพมีความชัดเจน เหมาะสำหรับแนบในรายงาน", "Image is clear and suitable for the report"],
-  ["หมายเหตุ / รายละเอียดการตรวจ", "Remarks / Inspection Details"], ["บันทึกด้วยเสียง", "Voice Note"], ["กำลังบันทึกเสียง...", "Recording..."],
-  ["กรอกรายละเอียด หรือใช้ปุ่มบันทึกเสียงด้านบน...", "Enter details or use the voice note button above..."], ["บันทึกผลการตรวจเช็ค", "Submit Inspection Result"],
-  ["ลำดับขั้นตอนการตรวจ 13 งาน", "13-Task Inspection Timeline"], ["ตรวจสอบความสมบูรณ์ในแต่ละขั้นตอนของห้องพัก", "Review completion of each inspection task"],
-  ["บันทึกการตรวจล่าสุด", "Recent Inspection Records"], ["ผู้ตรวจล่าสุด:", "Last Inspector:"], ["วันที่:", "Date:"],
-  ["งานนี้ยังไม่มีหลักฐานภาพ", "No photo evidence is available for this task"], ["หลักฐานภาพถ่าย", "Photo Evidence"], ["เปลี่ยนสถานะ", "Change Status"],
-  ["ศูนย์เอกสารโครงการ", "Project Document Center"], ["จัดเก็บเอกสารการตรวจรับ งานสถาปัตยกรรม และแบบแปลน", "Store inspection, architectural, and plan documents"],
-  ["อัปโหลดเอกสาร", "Upload Document"], ["Uploaded documents", "เอกสารที่อัปโหลด"], ["หมวดหมู่:", "Category:"], ["ไฟล์ตัวอย่างสำหรับสาธิต", "Sample file for demonstration"],
-  ["เพิ่มเอกสาร ", "Added document "], [" แล้ว", " added"], ["ดาวน์โหลด ", "Downloaded "],
-  ["AI กำลังประมวลผลสรุปรายงานโครงการ...", "AI is preparing the project summary..."],
-  ["จากการวิเคราะห์ข้อมูล 216 ห้อง พบว่าความก้าวหน้าโดยรวมอยู่ที่ 74% โดยงาน Finishing Paint และ Tiling บนชั้น 4-5 อยู่ในเกณฑ์สมบูรณ์สูง แนะนำให้เพิ่มอัตรากำลังช่างประตูกระจกเพื่อเร่งรัดการส่งมอบชั้น 7-8", "Analysis of 216 rooms indicates 74% overall progress. Finishing paint and tiling on floors 4–5 are progressing well. Consider adding glass-door crews to accelerate handover on floors 7–8."],
-  ["งานทาสี Finish Paint 1 (พบรอยด่าง 18 จุด)", "Finish Paint 1 (18 blemishes found)"],
-  ["คาดว่าจะพร้อมส่งมอบทั้งโครงการภายในวันที่ 15 พฤศจิกายน 2026", "The project is forecast to be ready for handover by November 15, 2026"],
-  ["เครื่องมือวิเคราะห์อัจฉริยะ ตรวจจับ Defect อัตโนมัติและสรุปรายงานบริหาร", "Analysis tools for defect detection and executive project reports"],
-  ["สร้างรายงานสรุป AI", "Generate AI Summary"], ["ผลการวิเคราะห์ภาพรวมบริหาร", "Executive Analysis Summary"],
-  ["จุดต้องแก้ไขด่วน", "Top Defect Trade"], ["ประมาณการวันส่งมอบ", "Handover Forecast"],
-  ["แผนผังสถานะการส่งมอบ", "Building Handover Heatmap"], ["ภาพรวม 8 ชั้น x 27 ห้องพัก (สีเขียว = พร้อมส่งมอบ / สีแดง = พบ Defect)", "8 floors × 27 rooms (green = ready for handover / red = defect found)"],
-  ["ดาวน์โหลดรายงาน Excel (CSV) แล้ว", "Excel report (CSV) downloaded"], ["PDF Export", "ส่งออก PDF"], ["Excel Export", "ส่งออก Excel"],
-  ["พร้อมส่งมอบ", "Ready for Handover"], ["กำลังดำเนินการ", "In Progress"], ["มีข้อบกพร่อง", "Defect Found"],
-  ["รอดำเนินการ", "Pending"], ["ผ่านการตรวจ", "Passed"], ["ไม่ผ่าน", "Failed"],
-  ["ฉาบปูนผนัง", "Wall Plastering"], ["ฉาบสกิมโค้ต", "Skim Coat"], ["ปรับระดับพื้น", "Screed"], ["ทาสีรองพื้น", "Primer Paint"],
-  ["ทาสีจริงครั้งที่ 1", "Finish Paint 1"], ["ทาสีจริงครั้งที่ 2", "Finish Paint 2"], ["ปูกระเบื้องห้องน้ำ", "Bathroom Tiling"],
-  ["โครงฝ้าเพดาน", "Ceiling Frame"], ["แผ่นฝ้าเพดาน", "Ceiling Board"], ["ประตูหลัก", "Main Door"], ["ประตูห้องน้ำ", "Bathroom Door"],
-  ["ฉากกั้นอาบน้ำ", "Shower Screen"], ["บัวเชิงผนัง", "Skirting"],
-  ["Deluxe King", "ห้องดีลักซ์เตียงคิงไซส์"], ["Executive Suite", "ห้องเอ็กเซ็กคิวทีฟสวีท"], ["Standard Twin", "ห้องมาตรฐานเตียงคู่"], ["Corner Suite", "ห้องคอร์เนอร์สวีท"],
-  ["นายธนโชค ซี.", "Tanachock C."], ["passed", "ผ่าน"], ["defect", "พบข้อบกพร่อง"], ["inProgress", "กำลังดำเนินการ"], ["pending", "รอดำเนินการ"],
-  ["RI (Request for Inspection) Document", "เอกสาร RI (Request for Inspection)"],
-  ["Simulated AI verification checks file format and metadata only; it cannot confirm issuer authenticity.", "การตรวจจำลองด้วย AI ตรวจเฉพาะรูปแบบและข้อมูลไฟล์ ไม่สามารถยืนยันผู้ออกเอกสารได้"],
-  ["Checking…", "กำลังตรวจสอบ…"], ["Simulated AI: likely genuine RI · demo only", "AI จำลอง: เอกสาร RI มีแนวโน้มถูกต้อง · ใช้สาธิตเท่านั้น"],
-  ["Review required · filename does not identify an RI · simulation", "ต้องตรวจทาน · ชื่อไฟล์ไม่ระบุว่าเป็น RI · ผลจำลอง"], ["Verification failed · unsupported file · simulation", "ตรวจสอบไม่ผ่าน · ไฟล์ไม่รองรับ · ผลจำลอง"],
-  ["Room Plan Task Map", "แผนผังห้องพร้อมจุดงานตรวจ"], ["Attached floor plan · numbered markers show task locations", "แปลนที่แนบ · หมายเลขแสดงตำแหน่งงานตรวจ"],
-  ["Living", "ห้องนั่งเล่น"], ["Bedroom", "ห้องนอน"], ["Bathroom", "ห้องน้ำ"], ["Kitchen", "ครัว"], ["Entry", "ทางเข้า"],
-  ["Read-only room status", "สถานะห้อง (อ่านอย่างเดียว)"], ["Read-only checklist", "รายการตรวจ (อ่านอย่างเดียว)"],
-  ["Floor Progress", "ความคืบหน้ารายชั้น"], ["Floor Status", "สถานะรายชั้น"], ["Trade Defects", "ข้อบกพร่องแยกตามงาน"],
-  ["Missing Mix Valve", "วาล์วผสมน้ำหาย"], ["Plumbing Issue", "ปัญหาระบบประปา"], ["Ceiling Defect", "ฝ้าเพดานชำรุด"], ["Electrical Fault", "ระบบไฟฟ้าขัดข้อง"], ["Ceiling Board Crack", "ฝ้าเพดานแตกร้าว"], ["Shower Screen Gap", "ช่องว่างฉากกั้นอาบน้ำ"],
-  ["Checking status…", "กำลังตรวจสอบสถานะ…"], ["Verified (Simulated)", "ผ่านการตรวจจำลอง"], ["Review Required (Simulated)", "ต้องตรวจทาน (ผลจำลอง)"],
-  ["AI Executive Workbench", "พื้นที่วิเคราะห์สำหรับผู้บริหารด้วย AI"], ["AI Image Quality Score:", "คะแนนคุณภาพภาพจาก AI:"],
-  ["Quality:", "คุณภาพ:"], ["High Resolution", "ความละเอียดสูง"], ["Passed (No blur)", "ผ่าน (ภาพไม่เบลอ)"],
-  ["Defect Points", "จุดบกพร่อง"], ["Export Report", "ส่งออกรายงาน"], ["Date", "วันที่"], ["Floor", "ชั้น"],
-  ["Passed & Ready", "ผ่านและพร้อมส่งมอบ"], ["Active Defects", "ข้อบกพร่องที่ต้องแก้"], ["Pending Inspections", "รอการตรวจ"], ["ready", "พร้อมส่งมอบ"],
-  ["View Details", "ดูรายละเอียด"], ["Edit", "แก้ไข"], ["Close", "ปิด"], ["Save Changes", "บันทึกการเปลี่ยนแปลง"],
-  ["All", "ทั้งหมด"], ["Select Floor", "เลือกชั้น"], ["Trade", "หมวดหมู่งาน"], ["Inspector", "ผู้ตรวจงาน"],
-  ["Floor Grid Selector", "ตัวเลือกผังรายชั้น"], ["13-Task Inspection Checklist", "รายการตรวจ 13 งาน"], ["PASSED", "ผ่าน"], ["DEFECT", "พบข้อบกพร่อง"],
-  ["View Photos", "ดูรูปภาพ"], ["View RI Document", "ดูเอกสาร RI"], ["No photo evidence", "ไม่มีหลักฐานรูปภาพ"], ["No RI document", "ไม่มีเอกสาร RI"],
-  ["Evidence Preview", "ตัวอย่างหลักฐาน"], ["Evidence file is unavailable", "ไม่พบไฟล์หลักฐาน"], ["Open or download file", "เปิดหรือดาวน์โหลดไฟล์"], ["Close preview", "ปิดตัวอย่าง"],
-  ["Room Status", "สถานะห้อง"], ["Handover", "การส่งมอบ"], ["Floor", "ชั้น"], ["Floor ", "ชั้น "],
-  ["Missing Valve", "วาล์วน้ำหาย"], ["Handover Forecast", "คาดการณ์ส่งมอบ"], ["Top Defect Trade", "งานที่มีข้อบกพร่องสูงสุด"],
-  ["Generate Insights", "สร้างข้อมูลเชิงลึก"], ["PDF / Excel Preview Viewer Placeholder", "พื้นที่ตัวอย่างแสดง PDF / Excel"],
-  ["PDF Export", "ส่งออก PDF"], ["Excel Export", "ส่งออก Excel"],
-  ["การแจ้งเตือนล่าสุด: ตรวจสอบห้อง 412 เรียบร้อย", "Latest notification: Room 412 was inspected"],
-  ["บันทึกผลตรวจห้อง ", "Saved inspection for Room "], [" สำเร็จ", " completed"],
-  ["อัปเดตข้อมูลห้อง ", "Updated Room "], ["แปลงเสียงเป็นข้อความสำเร็จ", "Voice transcription completed"],
-  ["สถานะหลักของห้อง", "Overall Room Status"], ["รายละเอียดห้องพัก", "Room Details"], ["ผู้ตรวจล่าสุด", "Last Inspector"],
-  ["บันทึกการตรวจล่าสุด", "Recent Inspection Records"], ["ลำดับขั้นตอนการตรวจ 13 งาน", "13-Task Inspection Timeline"],
-  ["ชั้น ", "Floor "], ["ห้องพัก", "Room"], ["ความคืบหน้า", "Progress"], ["รอการตรวจเช็ค", "Pending Inspection"],
-  ["สถานะการตรวจแยกตามชั้น", "Inspection Status by Floor"], ["สรุปผลการตรวจ", "Inspection Result Summary"], ["ห้องที่ต้องแก้ไขเร่งด่วน", "Critical Rooms"],
-  ["ยังไม่ส่งตรวจ", "Not Submitted"], ["รอตรวจ", "Ready for Inspection"], ["วาล์วน้ำหาย", "Missing Mix Valve"],
-  ["หมวดหมู่ช่าง", "Trade"], ["ศูนย์เอกสารโครงการ", "Project Document Center"], ["สถานะการส่งมอบห้องพัก", "Handover Status"],
-  ["Inspection Reports", "รายงานการตรวจ"], ["Defect Reports", "รายงานข้อบกพร่อง"], ["RI Documents", "เอกสาร RI"],
-  ["Upload Document", "อัปโหลดเอกสาร"], ["Room Plan with inspection task markers", "แผนผังห้องพร้อมจุดระบุตำแหน่งงานตรวจ"],
-  ["Room Details", "รายละเอียดห้อง"], ["Task", "รายการตรวจ"], ["AI Summary Output", "ผลสรุปจาก AI"], ["Executive Analysis Summary", "สรุปผลวิเคราะห์สำหรับผู้บริหาร"],
-  ["Recording...", "กำลังบันทึกเสียง..."], ["Voice Note", "บันทึกเสียง"], ["Room Status", "สถานะห้อง"],
-  ["สถานะ", "Status"], ["ดูรายละเอียดห้อง", "View Room Details"], ["สร้างรายงานสรุป AI (Generate Insights)", "Generate AI Summary"],
-  ["Tracking & Reporting Expert System", "ระบบติดตามและรายงานผลอัจฉริยะ"], ["Site Engineer", "วิศวกรประจำไซต์"],
+const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const shiftDate = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const formatDateTime = value => value ? new Date(value).toLocaleString() : '—';
+const calendarBounds = (year, monthIndex) => { const first = new Date(year, monthIndex, 1); return { offset: (first.getDay() + 6) % 7, days: new Date(year, monthIndex + 1, 0).getDate() }; };
+const uid = () => globalThis.crypto?.randomUUID?.() || `trex-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const readStore = () => { try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch { return {}; } };
+const seedRequests = () => [
+  { id: 'rq-4401', projectId: 'PJ00888', requestNo: 'RI-00888-041', rootId: 'ROOT-041', stage: WORK_TYPES[0], title: 'ตรวจผนังห้องพักก่อนปิดผิว', appointment: shiftDate(0), time: '09:00', coordinator: 'Phattarawadee Sroiphap', rooms: ['101', '102', '103'], status: 'Partially Inspected', attachmentNames: ['Floor-01-Architectural.pdf'], createdAt: new Date().toISOString() },
+  { id: 'rq-4402', projectId: 'PJ00888', requestNo: 'RI-00888-042', rootId: 'ROOT-042', stage: WORK_TYPES[1], title: 'ตรวจทดสอบกันซึมห้องน้ำ', appointment: shiftDate(1), time: '10:30', coordinator: 'Phattarawadee Sroiphap', rooms: ['104', '105'], status: 'Scheduled', attachmentNames: ['Waterproofing-Method.pdf'], createdAt: new Date().toISOString() },
+  { id: 'rq-4403', projectId: 'PJ00888', requestNo: 'RI-00888-039', rootId: 'ROOT-039', stage: WORK_TYPES[2], title: 'ตรวจงานปูกระเบื้องตัวอย่าง', appointment: shiftDate(-2), time: '13:00', coordinator: 'Site Engineer', rooms: ['106', '107', '108', '109'], status: 'Completed', attachmentNames: [], createdAt: new Date().toISOString() },
+  { id: 'rq-00440-1', projectId: 'PJ00440', requestNo: 'RI-00440-018', rootId: 'ROOT-018', stage: WORK_TYPES[3], title: 'ตรวจโครงคร่าวฝ้าเพดาน', appointment: shiftDate(2), time: '09:30', coordinator: 'Site Engineer', rooms: ['201', '202'], status: 'Scheduled', attachmentNames: [], createdAt: new Date().toISOString() },
+  { id: 'rq-00442-1', projectId: 'PJ00442', requestNo: 'RI-00442-022', rootId: 'ROOT-022', stage: WORK_TYPES[4], title: 'ตรวจสีรองพื้นและผิวงาน', appointment: shiftDate(1), time: '14:00', coordinator: 'Site Engineer', rooms: ['301', '302', '303'], status: 'Scheduled', attachmentNames: [], createdAt: new Date().toISOString() },
+  { id: 'rq-00446-1', projectId: 'PJ00446', requestNo: 'RI-00446-009', rootId: 'ROOT-009', stage: WORK_TYPES[5], title: 'ตรวจวงกบประตูและหน้าต่าง', appointment: shiftDate(3), time: '10:00', coordinator: 'Site Engineer', rooms: ['401', '402'], status: 'Scheduled', attachmentNames: [], createdAt: new Date().toISOString() },
 ];
-
-const translateString = (value, lang) => {
-  const normalizedPairs = bilingualPairs.map(([first, second]) => /[\u0E00-\u0E7F]/.test(first) ? [first, second] : [second, first]);
-  const pairs = lang === 'en' ? normalizedPairs : normalizedPairs.map(([th, en]) => [en, th]);
-  return [...pairs].sort((a, b) => b[0].length - a[0].length).reduce((text, [source, target]) => text.replaceAll(source, target), value);
-};
-
-function LocalizedUI({ lang, children }) {
-  const localize = (node) => {
-    if (typeof node === 'string') return translateString(node, lang);
-    if (Array.isArray(node)) return node.map(localize);
-    if (!React.isValidElement(node)) return node;
-    const props = { ...node.props };
-    for (const key of ['placeholder', 'title', 'alt', 'aria-label']) {
-      if (typeof props[key] === 'string') props[key] = translateString(props[key], lang);
-    }
-    if (props.children !== undefined) props.children = localize(props.children);
-    return React.cloneElement(node, props);
-  };
-  return <>{localize(children)}</>;
-}
-
-// 13 Standard Construction Tasks
-const TASKS_13 = [
-  "Wall Plastering", "Skim Coat", "Screed", "Primer Paint", 
-  "Finish Paint 1", "Finish Paint 2", "Bathroom Tiling", "Ceiling Frame", 
-  "Ceiling Board", "Main Door", "Bathroom Door", "Shower Screen", "Skirting"
+const seedEvents = () => [
+  { id: 'ev-01', projectId: 'PJ00888', requestId: 'rq-4401', requestNo: 'RI-00888-041', room: '101', stage: WORK_TYPES[0], date: shiftDate(0), recorder: 'Phattarawadee Sroiphap', result: 'Pass', checklist: Object.fromEntries(CHECKLIST.map(x => [x, 'Pass'])), defect: '', location: '', note: 'ผิวงานเรียบร้อย ตรวจระดับซ้ำแล้ว', evidence: [], cmConfirmed: true },
+  { id: 'ev-02', projectId: 'PJ00888', requestId: 'rq-4401', requestNo: 'RI-00888-041', room: '102', stage: WORK_TYPES[0], date: shiftDate(0), recorder: 'Phattarawadee Sroiphap', result: 'Fail', checklist: { [CHECKLIST[0]]: 'Pass', [CHECKLIST[1]]: 'Fail', [CHECKLIST[2]]: 'Fail', [CHECKLIST[3]]: 'Pass' }, defect: 'ผิวฉาบบริเวณมุมผนังเป็นคลื่น', location: 'มุมผนังด้านหน้าห้อง', note: 'แก้ไขก่อนนัดตรวจซ้ำ', evidence: [], cmConfirmed: false },
+  { id: 'ev-03', projectId: 'PJ00888', requestId: 'rq-4403', requestNo: 'RI-00888-039', room: '106', stage: WORK_TYPES[2], date: shiftDate(-2), recorder: 'Site Engineer', result: 'Pass', checklist: Object.fromEntries(CHECKLIST.map(x => [x, 'Pass'])), defect: '', location: '', note: '', evidence: [], cmConfirmed: true },
+  { id: 'ev-04', projectId: 'PJ00888', requestId: 'rq-4403', requestNo: 'RI-00888-039', room: '107', stage: WORK_TYPES[2], date: shiftDate(-2), recorder: 'Site Engineer', result: 'Pass', checklist: Object.fromEntries(CHECKLIST.map(x => [x, 'Pass'])), defect: '', location: '', note: '', evidence: [], cmConfirmed: true },
 ];
-const TASKS_13_TH = [
-  "ฉาบปูนผนัง", "ฉาบสกิมโค้ต", "ปรับระดับพื้น", "ทาสีรองพื้น", "ทาสีจริงครั้งที่ 1", "ทาสีจริงครั้งที่ 2",
-  "ปูกระเบื้องห้องน้ำ", "โครงฝ้าเพดาน", "แผ่นฝ้าเพดาน", "ประตูหลัก", "ประตูห้องน้ำ", "ฉากกั้นอาบน้ำ", "บัวเชิงผนัง"
+const seedDocs = () => [
+  { id: 'doc-01', projectId: 'PJ00888', name: 'Architectural_Floor_01.pdf', type: 'Drawing', requestNo: 'RI-00888-041', building: 'Building A', floor: '1', room: '101', round: 'Round 1', date: shiftDate(0), size: '2.4 MB', uploadedBy: 'Phattarawadee Sroiphap' },
+  { id: 'doc-02', projectId: 'PJ00888', name: 'Waterproofing_Method.pdf', type: 'Request / RI', requestNo: 'RI-00888-042', building: 'Building A', floor: '1', room: '104', round: 'Round 1', date: shiftDate(1), size: '1.8 MB', uploadedBy: 'Site Engineer' },
+  { id: 'doc-03', projectId: 'PJ00888', name: 'Room_102_Inspection_Note.pdf', type: 'Inspection Report', requestNo: 'RI-00888-041', building: 'Building A', floor: '1', room: '102', round: 'Round 1', date: shiftDate(0), size: '640 KB', uploadedBy: 'Phattarawadee Sroiphap' },
+  { id: 'doc-04', projectId: 'PJ00440', name: 'Ceiling_Shop_Drawing.pdf', type: 'Drawing', requestNo: 'RI-00440-018', building: 'Building A', floor: '2', room: '201', round: 'Round 1', date: shiftDate(2), size: '3.1 MB', uploadedBy: 'Site Engineer' },
+  { id: 'doc-05', projectId: 'PJ00442', name: 'Paint_Inspection_Checklist.xlsx', type: 'Checklist', requestNo: 'RI-00442-022', building: 'Building B', floor: '3', room: '301', round: 'Round 2', date: shiftDate(1), size: '520 KB', uploadedBy: 'Site Engineer' },
 ];
-const taskLabel = (task, lang) => {
-  const index = TASKS_13.indexOf(task);
-  return index >= 0 ? (lang === 'th' ? TASKS_13_TH[index] : TASKS_13[index]) : task;
-};
-const canonicalTask = task => {
-  const thaiIndex = TASKS_13_TH.indexOf(task);
-  return thaiIndex >= 0 ? TASKS_13[thaiIndex] : task;
-};
-
-function downloadFile(content, filename, type = 'text/plain;charset=utf-8') {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-const getLocalDateString = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-function effectiveDocumentDate(doc) {
-  const candidate = doc.scheduledDate || doc.appointment_date || doc.appointmentDate || doc.date || doc.uploadedAt || doc.updated_at;
-  if (!candidate) return '';
-  const value = String(candidate).trim();
-  const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})$/);
-  if (dateOnly) return dateOnly[1];
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? '' : getLocalDateString(parsed);
-}
-function currentIsoWeekValue(date = new Date()) {
-  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const day = utcDate.getUTCDay() || 7;
-  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
-  const week = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
-  return `${utcDate.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-}
-function isoWeekRange(weekValue) {
-  const [year, week] = String(weekValue || '').split('-W').map(Number);
-  if (!year || !week) return ['', ''];
-  const jan4 = new Date(year, 0, 4);
-  const monday = new Date(year, 0, 4 - ((jan4.getDay() + 6) % 7) + (week - 1) * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return [getLocalDateString(monday), getLocalDateString(sunday)];
-}
-const dayDifference = (fromDate, toDate = getLocalDateString()) => Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000);
-const expireDueRiDocuments = (documents, today = getLocalDateString()) => documents.map(doc => doc.documentType === 'ri' && doc.status === 'pending' && doc.scheduledDate && dayDifference(doc.scheduledDate, today) >= 2 ? { ...doc, status: 'expired' } : doc);
-
-function normalizeHistoryLogRow(value = {}) {
-  const row = {};
-  HISTORY_LOG_FIELDS.forEach(field => {
-    const camel = field.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-    row[field] = value[field] ?? value[camel] ?? '';
-  });
-  row.id = String(row.id || row.doc_no || crypto.randomUUID());
-  row.building = canonicalBuilding(row.building, row.floor);
-  row.doc_type = String(row.doc_type || '').trim().toLowerCase();
-  row.trade = canonicalTask(row.trade);
-  row.floor = String(row.floor ?? '');
-  row.room = String(row.room ?? '');
-  return row;
-}
-
-function mergeHistoryRows(primaryRows, cachedRows) {
-  const rowsById = new Map();
-  [...cachedRows, ...primaryRows].forEach(value => {
-    const row = normalizeHistoryLogRow(value);
-    const previous = rowsById.get(row.id) || {};
-    const merged = { ...previous };
-    HISTORY_LOG_FIELDS.forEach(field => {
-      const incoming = row[field];
-      if (incoming !== '' && incoming !== null && incoming !== undefined) merged[field] = incoming;
-      else if (merged[field] === undefined) merged[field] = incoming ?? '';
-    });
-    rowsById.set(row.id, merged);
-  });
-  return [...rowsById.values()];
-}
-
-function persistHistoryRowsCache(rows) {
-  const normalized = rows.map(normalizeHistoryLogRow);
-  try { localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(normalized)); }
-  catch (error) { console.error('HistoryLog cache write failed:', error); }
-  return normalized;
-}
-
-function driveFileId(fileUrl) {
-  try {
-    const url = new URL(fileUrl);
-    if (!/(^|\.)drive\.google\.com$/i.test(url.hostname)) return '';
-    return url.pathname.match(/\/file\/d\/([^/]+)/)?.[1] || url.searchParams.get('id') || '';
-  } catch { return ''; }
-}
-
-function safeDriveImageUrl(fileUrl) {
-  const id = driveFileId(fileUrl);
-  return id ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w1200` : fileUrl;
-}
-
-function inferEvidenceMimeType(fileName = '') {
-  const name = String(fileName).toLowerCase();
-  if (/\.png$/.test(name)) return 'image/png';
-  if (/\.(jpe?g)$/.test(name)) return 'image/jpeg';
-  if (/\.webp$/.test(name)) return 'image/webp';
-  if (/\.pdf$/.test(name)) return 'application/pdf';
-  return 'application/octet-stream';
-}
-
-function DriveImageThumbnail({ fileUrl, fileName, label }) {
-  const [failed, setFailed] = useState(false);
-  if (!fileUrl) return null;
-  if (failed) return <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-[10px] font-semibold text-sky-300 underline">{label}</a>;
-  return <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-16 w-20 items-center justify-center overflow-hidden rounded-md border border-slate-700 bg-slate-900" title={label}>
-    <img src={safeDriveImageUrl(fileUrl)} alt={fileName || label} loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" />
-  </a>;
-}
-
-function LocalEvidenceButton({ record, kind, label, lang }) {
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [error, setError] = useState('');
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
-  const open = async () => {
-    const fileUrl = kind === 'photo' ? record.photo?.file_url : record.riDocument?.file_url;
-    if (fileUrl) { window.open(fileUrl, '_blank', 'noopener,noreferrer'); return; }
-    try {
-      const id = kind === 'ri' && record.riDocument?.document_id ? record.riDocument.document_id : record.evidence_id || record.id;
-      const blob = await loadInspectionEvidence(id, kind === 'ri' && record.riDocument?.document_id ? 'photo' : kind);
-      if (!blob) throw new Error('Evidence is not available in local storage');
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(URL.createObjectURL(blob));
-      setError('');
-    } catch (cause) {
-      console.error('Could not open local inspection evidence:', cause);
-      setError(lang === 'th' ? 'ไม่พบไฟล์ในอุปกรณ์นี้' : 'File is not available on this device');
-    }
-  };
-  const fileName = kind === 'photo' ? record.photo?.name : record.riDocument?.name;
-  return <><button type="button" onClick={open} className="mt-2 mr-2 inline-flex rounded-md bg-sky-900/70 px-2.5 py-1.5 font-semibold text-sky-200 hover:bg-sky-800">{label}</button>{error && <span role="alert" className="text-rose-300">{error}</span>}{previewUrl && <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 p-3" onClick={() => setPreviewUrl('')}><section className="w-full max-w-4xl overflow-hidden rounded-xl border border-slate-600 bg-slate-900" onClick={event => event.stopPropagation()}><header className="flex items-center justify-between gap-3 p-3 text-sm font-semibold text-white"><span className="truncate">{fileName}</span><button type="button" onClick={() => setPreviewUrl('')} aria-label={lang === 'th' ? 'ปิด' : 'Close'}><X className="h-4 w-4" /></button></header>{inferEvidenceMimeType(fileName).startsWith('image/') ? <img src={previewUrl} alt={fileName || label} className="mx-auto max-h-[72vh] max-w-full object-contain" /> : <iframe title={fileName || label} src={previewUrl} className="h-[72vh] w-full bg-white" />}<footer className="flex justify-end border-t border-slate-700 p-3"><a href={previewUrl} download={fileName} className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white">{lang === 'th' ? 'ดาวน์โหลด' : 'Download'}</a></footer></section></div>}</>;
-}
-
-function readLocalHistoryRows() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(HISTORY_LOG_CACHE_KEY) || '[]');
-    return Array.isArray(cached) ? cached.map(normalizeHistoryLogRow) : [];
-  } catch { return []; }
-}
-
-function historyRowToInspection(row, inspector = '') {
+const initialData = () => {
+  const saved = readStore();
   return {
-    id: row.id, evidence_id: String(row.doc_type).toLowerCase() === 'ri' && String(row.id).endsWith('-ri') ? String(row.id).slice(0, -3) : row.id,
-    building: canonicalBuilding(row.building, row.floor), floor: String(row.floor || ''), roomNumber: String(row.room), task: row.trade, status: row.status,
-    remarks: row.reason, date: row.updated_at, inspector,
-    photo: row.doc_type === 'inspection' && (row.file_url || row.file_name) ? { name: row.file_name, type: '', file_url: row.file_url } : null,
-    riDocument: row.doc_type === 'ri' && (row.file_url || row.file_name) ? { name: row.file_name, type: '', file_url: row.file_url } : null,
-    file_url: row.file_url, folder_path: row.folder_path,
+    user: saved.user || null,
+    currentProject: saved.currentProject || 'PJ00888',
+    requests: saved.requests || seedRequests(), events: saved.events || seedEvents(),
+    docs: saved.docs || seedDocs(), packs: saved.packs || [], drafts: saved.drafts || [],
+    notifications: saved.notifications || [
+      { id: 'n1', title: 'นัดตรวจ RI-00888-041 วันนี้ 09:00', detail: 'งานก่ออิฐ-ฉาบ · 3 ห้อง', read: false },
+      { id: 'n2', title: 'Room 102 พบ Defect', detail: 'ผิวฉาบบริเวณมุมผนังเป็นคลื่น', read: false },
+    ],
   };
-}
-
-function toHistoryLogRow({ id, building, floor, room, trade, docNo, docType, appointmentDate = '', status = '', reason = '', fileName = '', fileUrl = '', folderPath = '', updatedAt = new Date().toISOString() }) {
-  return normalizeHistoryLogRow({ id, building, floor, room, trade, doc_no: docNo, doc_type: docType, appointment_date: appointmentDate, status, reason, file_name: fileName, file_url: fileUrl, folder_path: folderPath, updated_at: updatedAt });
-}
-
-function buildDriveFileName(building, floor, room, docNo, originalFileName) {
-  const cleanPart = value => String(value || '').trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
-  return [building, floor, room, docNo, originalFileName].map(cleanPart).filter(Boolean).join('_');
-}
-
-function legacyInspectionsToHistory(records, rooms) {
-  return records.map(record => {
-    const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber));
-    return toHistoryLogRow({
-      id: record.id || crypto.randomUUID(), building: canonicalBuilding(room?.building || PROJECT_BUILDING_NAME, room?.floor), floor: room?.floor || '', room: record.roomNumber,
-      trade: record.task, docNo: record.id || `INS-${record.roomNumber}-${record.task}`, docType: 'inspection',
-      status: record.status, reason: record.remarks || '', fileName: record.photo?.name || '', fileUrl: '',
-      folderPath: '', updatedAt: record.date || new Date().toISOString(),
-    });
-  });
-}
-
-function historyRowsToInspections(rows, fallbackInspector = '') {
-  return rows.filter(row => ['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()) || (row.doc_type === 'ri' && TASKS_13.includes(row.trade)))
-    .map(row => historyRowToInspection(row, fallbackInspector));
-}
-
-function mergeInspectionRecords(rows, currentRecords, fallbackInspector = '') {
-  const currentById = new Map(currentRecords.map(record => [String(record.id), record]));
-  return historyRowsToInspections(rows, fallbackInspector).map(remote => {
-    const local = currentById.get(String(remote.id));
-    return {
-      ...local,
-      ...remote,
-      inspector: local?.inspector || remote.inspector,
-      photo: remote.photo ? { ...local?.photo, ...remote.photo } : local?.photo || null,
-      riDocument: remote.riDocument ? { ...local?.riDocument, ...remote.riDocument } : local?.riDocument || null,
-    };
-  });
-}
-
-function applyHistoryRowsToRooms(currentRooms, rows) {
-  const byRoom = new Map();
-  rows.filter(row => ['inspection', 'inspection_record'].includes(String(row.doc_type).toLowerCase()) && TASKS_13.includes(row.trade))
-    .forEach(row => {
-      const key = `${canonicalBuilding(row.building, row.floor)}|${row.room}`;
-      if (!byRoom.has(key)) byRoom.set(key, []);
-      byRoom.get(key).push(row);
-    });
-  return currentRooms.map(room => {
-    const roomRows = byRoom.get(`${canonicalBuilding(room.building, room.floor)}|${room.roomNumber}`);
-    if (!roomRows?.length) return room;
-    const tasks = { ...room.tasks };
-    roomRows.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at))).forEach(row => { tasks[row.trade] = row.status || 'pending'; });
-    const passed = Object.values(tasks).filter(value => value === 'passed').length;
-    const defects = Object.values(tasks).filter(value => value === 'defect').length;
-    return { ...room, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects, status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: roomRows[roomRows.length - 1].updated_at || room.lastUpdate };
-  });
-}
-
-const EVIDENCE_DB_NAME = 'trex-inspection-evidence';
-const EVIDENCE_STORE_NAME = 'records';
-function openEvidenceDb() {
-  return new Promise((resolve, reject) => {
-    if (!window.indexedDB) return reject(new Error('IndexedDB is unavailable'));
-    const request = window.indexedDB.open(EVIDENCE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(EVIDENCE_STORE_NAME)) request.result.createObjectStore(EVIDENCE_STORE_NAME, { keyPath: 'id' });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('Could not open evidence storage'));
-  });
-}
-
-async function storeInspectionEvidence(recordId, evidence) {
-  if (!evidence?.photo && !evidence?.ri) return;
-  const db = await openEvidenceDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(EVIDENCE_STORE_NAME);
-    const request = store.get(recordId);
-    request.onsuccess = () => store.put({ ...(request.result || {}), id: recordId, photo: evidence.photo || request.result?.photo || null, ri: evidence.ri || request.result?.ri || null });
-    transaction.oncomplete = () => { db.close(); resolve(); };
-    transaction.onerror = () => { const error = transaction.error; db.close(); reject(error || new Error('Could not save evidence')); };
-    transaction.onabort = () => { const error = transaction.error; db.close(); reject(error || new Error('Evidence save was cancelled')); };
-  });
-}
-
-async function loadInspectionEvidence(recordId, kind) {
-  const db = await openEvidenceDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(EVIDENCE_STORE_NAME, 'readonly');
-    const request = transaction.objectStore(EVIDENCE_STORE_NAME).get(recordId);
-    request.onsuccess = () => { const value = request.result?.[kind] || null; db.close(); resolve(value); };
-    request.onerror = () => { const error = request.error; db.close(); reject(error || new Error('Could not load evidence')); };
-  });
-}
-
-// Generate Initial Sample Data for 8 Floors x 27 Rooms = 216 Rooms
-const generateRoomsData = () => {
-  const rooms = [];
-  const roomTypes = ['Deluxe King', 'Executive Suite', 'Standard Twin', 'Corner Suite'];
-  
-  for (let floor = 1; floor <= 8; floor++) {
-    for (let r = 1; r <= 27; r++) {
-      const roomNo = `${floor}${r < 10 ? '0' + r : r}`;
-      const type = roomTypes[(floor + r) % roomTypes.length];
-      const building = floor <= 4 ? BUILDING_A : BUILDING_B;
-      
-      // Seed a believable construction sequence: lower floors are further along.
-      const completedTasks = Math.max(0, Math.min(13, Math.round(1 + floor * 1.35 + ((r * 7 + floor * 3) % 7) - 3)));
-      const notSubmitted = (r + floor * 2) % 6 === 0;
-      const tasksStatus = {};
-      TASKS_13.forEach((task, idx) => {
-        if (notSubmitted) {
-          tasksStatus[task] = 'pending';
-        } else if (idx < completedTasks) {
-          tasksStatus[task] = 'passed';
-        } else if (idx === completedTasks) {
-          tasksStatus[task] = (floor + r) % 3 === 0 ? 'defect' : 'inProgress';
-        } else {
-          tasksStatus[task] = 'pending';
-        }
-      });
-
-      let overallStatus = notSubmitted ? 'pending' : 'inProgress';
-      if (!notSubmitted && completedTasks === 13) overallStatus = 'ready';
-      else if (Object.values(tasksStatus).includes('defect')) overallStatus = 'defect';
-
-      rooms.push({
-        id: `${building}-${roomNo}`,
-        building,
-        roomNumber: roomNo,
-        floor: floor,
-        type: type,
-        status: overallStatus,
-        progress: notSubmitted ? 0 : Math.round((completedTasks / 13) * 100),
-        tasks: tasksStatus,
-        lastInspector: "นายธนโชค ซี.",
-        lastUpdate: "2026-10-25 14:30",
-        defectsCount: Object.values(tasksStatus).filter(s => s === 'defect').length
-      });
-    }
-  }
-  // Both buildings use the complete eight-floor, 27-room template.
-  return BUILDING_VALUES.flatMap(building => rooms.map(room => ({ ...room, id: `${building}-${room.roomNumber}`, building })));
 };
 
-function completeRoomData(savedRooms) {
-  const defaults = generateRoomsData();
-  const savedByLocation = new Map(canonicalizeRooms(savedRooms).map(room => [`${canonicalBuilding(room.building, room.floor)}|${room.floor}|${room.roomNumber}`, room]));
-  return defaults.map(defaultRoom => {
-    const existing = savedByLocation.get(`${defaultRoom.building}|${defaultRoom.floor}|${defaultRoom.roomNumber}`);
-    return existing ? { ...defaultRoom, ...existing, id: defaultRoom.id, building: defaultRoom.building, tasks: Object.fromEntries(Object.entries(existing.tasks || {}).map(([task, status]) => [canonicalTask(task), status])) } : defaultRoom;
-  });
+function saveDownload(filename, content, type = 'text/plain;charset=utf-8') {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+function csvEscape(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
+function Badge({ children, color = 'slate' }) {
+  const colors = { slate: 'bg-slate-100 text-slate-600', green: 'bg-lime-100 text-lime-800', sky: 'bg-sky-100 text-sky-700', rose: 'bg-rose-100 text-rose-700', amber: 'bg-amber-100 text-amber-700' };
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${colors[color] || colors.slate}`}>{children}</span>;
+}
+function ResultBadge({ status }) { const item = STATUS[status] || STATUS.Pending; return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${item.color}`}><i className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />{item.label}</span>; }
+function Button({ children, variant = 'primary', className = '', ...props }) {
+  const styles = { primary: 'bg-lime-500 text-emerald-950 hover:bg-lime-400 shadow-sm', secondary: 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50', ghost: 'text-slate-600 hover:bg-slate-100', danger: 'bg-rose-600 text-white hover:bg-rose-500', dark: 'bg-emerald-950 text-white hover:bg-emerald-900' };
+  return <button className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${styles[variant]} ${className}`} {...props}>{children}</button>;
+}
+function Field({ label, children, className = '' }) { return <label className={`block space-y-1.5 ${className}`}><span className="text-xs font-semibold text-slate-600">{label}</span>{children}</label>; }
+const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-lime-500 focus:outline-none focus:ring-2 focus:ring-lime-100';
+function Modal({ title, onClose, children, size = 'max-w-2xl' }) { return <div className="fixed inset-0 z-50 grid place-items-center bg-emerald-950/40 p-3 backdrop-blur-sm" onMouseDown={e => e.target === e.currentTarget && onClose()}><section role="dialog" aria-modal="true" className={`max-h-[94vh] w-full ${size} overflow-hidden rounded-2xl bg-white shadow-2xl`}><header className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div className="min-w-0"><h2 className="truncate text-base font-bold text-slate-900">{title}</h2></div><button onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close"><X size={18}/></button></header><div className="max-h-[calc(94vh-64px)] overflow-y-auto p-5">{children}</div></section></div>; }
+function Empty({ text }) { return <div className="grid min-h-36 place-items-center rounded-2xl border border-dashed border-slate-200 bg-white px-4 text-center text-sm text-slate-400">{text}</div>; }
 
 export default function App() {
-  const [lang, setLang] = useState(() => localStorage.getItem('trex-language') || 'th');
-  const [project, setProject] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('trex-project')) || PROJECT_OPTIONS[0]; }
-    catch { return PROJECT_OPTIONS[0]; }
-  });
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [session, setSession] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('trex-session')) || null; }
-    catch { return null; }
-  });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [rooms, setRooms] = useState(() => {
-    try { const stored = JSON.parse(localStorage.getItem('trex-rooms')); return Array.isArray(stored) && stored.length ? completeRoomData(stored) : generateRoomsData(); }
-    catch { return generateRoomsData(); }
-  });
-  const [historyRows, setHistoryRows] = useState(() => {
-    const cached = readLocalHistoryRows();
-    if (cached.length) return cached;
-    try {
-      const legacy = JSON.parse(localStorage.getItem('trex-inspections') || '[]');
-      return Array.isArray(legacy) ? legacyInspectionsToHistory(legacy, rooms) : [];
-    } catch { return []; }
-  });
-  const [inspectionRecords, setInspectionRecords] = useState(() => {
-    const cached = readLocalHistoryRows();
-    try {
-      const saved = JSON.parse(localStorage.getItem('trex-inspections')) || [];
-      const canonicalSaved = Array.isArray(saved) ? saved.map(record => ({ ...record, task: canonicalTask(record.task) })) : [];
-      return cached.length ? mergeInspectionRecords(cached, canonicalSaved) : canonicalSaved;
-    }
-    catch { return []; }
-  });
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFloorFilter, setSelectedFloorFilter] = useState('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
-  
-  // Modal States
-  const [modalRoom, setModalRoom] = useState(null);
-  const [toastMessage, setToastMessage] = useState(null);
-  
-  const t = i18n[lang];
+  const [data, setData] = useState(initialData);
+  const [page, setPage] = useState(() => readStore().user ? 'overview' : 'login');
+  const [todayValue] = useState(todayIso);
+  const [loginName, setLoginName] = useState(''); const [loginPassword, setLoginPassword] = useState('');
+  const [projectChoice, setProjectChoice] = useState(() => readStore().currentProject || 'PJ00888');
+  const [openMenu, setOpenMenu] = useState(''); const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [toast, setToast] = useState(''); const [modal, setModal] = useState(null);
+  const [selectedFloor, setSelectedFloor] = useState(1); const [selectedRoom, setSelectedRoom] = useState('101');
+  const [requestFilter, setRequestFilter] = useState('All Status'); const [requestSearch, setRequestSearch] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [inspectionView, setInspectionView] = useState('My Inspection');
+  const [summarySearch, setSummarySearch] = useState(''); const [docSearch, setDocSearch] = useState('');
+  const [docFilters, setDocFilters] = useState({ building: 'All', floor: 'All', room: 'All', round: 'All' });
+  const [cameraState, setCameraState] = useState('');
+  const videoRef = useRef(null); const streamRef = useRef(null); const toastTimer = useRef(null);
+  const project = PROJECTS.find(p => p.id === data.currentProject) || PROJECTS[0];
+  const canEdit = data.user?.role === 'Site Engineer';
+  const projectRequests = useMemo(() => data.requests.filter(r => r.projectId === project.id), [data.requests, project.id]);
+  const projectEvents = useMemo(() => data.events.filter(e => e.projectId === project.id), [data.events, project.id]);
+  const projectDocs = useMemo(() => data.docs.filter(d => d.projectId === project.id), [data.docs, project.id]);
 
-  useEffect(() => { localStorage.setItem('trex-rooms', JSON.stringify(rooms)); }, [rooms]);
-  useEffect(() => { localStorage.setItem('trex-language', lang); }, [lang]);
-  useEffect(() => { localStorage.setItem('trex-project', JSON.stringify(project)); }, [project]);
-  useEffect(() => { localStorage.setItem('trex-inspections', JSON.stringify(inspectionRecords)); }, [inspectionRecords]);
-  useEffect(() => {
-    try { localStorage.setItem(HISTORY_LOG_CACHE_KEY, JSON.stringify(historyRows.map(normalizeHistoryLogRow))); }
-    catch (error) { console.warn('Could not update HistoryLog cache:', error); }
-  }, [historyRows]);
-
-  const showToast = (msg, link = '') => {
-    setToastMessage({ message: msg, link });
-    setTimeout(() => setToastMessage(null), link ? 9000 : 4500);
+  useEffect(() => { try { localStorage.setItem(STORE, JSON.stringify(data)); } catch { showToast('Storage is full. Remove some large attachments.'); } }, [data]);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop()); }, []);
+  function showToast(message) { setToast(message); if (toastTimer.current) clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 3000); }
+  const requireEdit = () => { if (canEdit) return true; showToast('VV / Viewer is read-only. Editing is unavailable.'); return false; };
+  const updateData = updater => setData(current => typeof updater === 'function' ? updater(current) : { ...current, ...updater });
+  const changeProject = id => { updateData(current => ({ ...current, currentProject: id })); setProjectChoice(id); setSelectedFloor(1); setSelectedRoom('101'); setOpenMenu(''); };
+  const login = e => {
+    e.preventDefault(); if (!loginName.trim() || !loginPassword.trim()) { showToast('Enter your username and password to continue.'); return; }
+    const key = loginName.trim().toLowerCase();
+    const user = key === 'vv test' ? { name: 'VV Test', role: 'VV / Viewer', email: 'vv.test@trex.example' }
+      : key === 'se test' ? { name: 'SE Test', role: 'Site Engineer', email: 'se.test@trex.example' }
+        : { name: loginName.trim() || 'Phattarawadee Sroiphap', role: 'Site Engineer', email: loginName.includes('@') ? loginName.trim() : 'phattarawadee@trex.example' };
+    updateData(current => ({ ...current, user })); setPage('sites');
   };
-
-  const handleLogin = (user) => {
-    setProject(user.project || PROJECT_OPTIONS[0]);
-    setSession(user);
-    localStorage.setItem('trex-session', JSON.stringify({ ...user, project: user.project || PROJECT_OPTIONS[0] }));
-    setActiveTab('dashboard');
-  };
-  const handleLogout = () => {
-    setSession(null);
-    localStorage.removeItem('trex-session');
-    setActiveTab('dashboard');
-    setMobileMenuOpen(false);
-  };
-
-  const persistHistoryRecord = useCallback(async (inputRow, file = null) => {
-    if (session?.role !== 'engineer') return null;
-    if (file && file.size > MAX_UPLOAD_BYTES) { showToast(i18n[lang].storage.fileTooLarge); return null; }
-    const row = normalizeHistoryLogRow(inputRow);
-    const localRow = { ...row, file_name: file ? buildDriveFileName(row.building, row.floor, row.room, row.doc_no, file.name) : row.file_name, file_url: row.file_url || '', folder_path: row.folder_path || (row.building + '/' + row.floor + '/' + row.room) };
-    if (file) {
-      try { await storeInspectionEvidence(row.id, { photo: file, ri: null }); }
-      catch (error) { console.error('Local file storage failed:', error); showToast(lang === 'th' ? 'บันทึกไฟล์ในอุปกรณ์ไม่สำเร็จ' : 'Could not save the file on this device'); throw error; }
-    }
-    const updatedRows = persistHistoryRowsCache(mergeHistoryRows([localRow], readLocalHistoryRows()));
-    setHistoryRows(updatedRows);
-    setInspectionRecords(current => mergeInspectionRecords(updatedRows, current, session.name));
-    if (String(row.doc_type).toLowerCase().startsWith('inspection')) setRooms(current => applyHistoryRowsToRooms(current, updatedRows));
-    return { ...localRow, _savedLocally: true };
-  }, [session, lang]);
-
-  const submitInspection = useCallback(async (record, evidence) => {
-    if (session?.role !== 'engineer') return;
-    try { await storeInspectionEvidence(record.id, evidence); }
-    catch (error) { console.error('Unable to persist inspection evidence locally:', error); showToast(lang === 'th' ? 'บันทึกหลักฐานในอุปกรณ์ไม่สำเร็จ' : 'Could not save evidence on this device'); }
-    const room = rooms.find(item => String(item.roomNumber) === String(record.roomNumber) && String(item.floor) === String(record.floor) && canonicalBuilding(item.building, item.floor) === canonicalBuilding(record.building, record.floor));
-    const base = { building: canonicalBuilding(record.building || room?.building || PROJECT_BUILDING_NAME, record.floor || room?.floor), floor: record.floor || room?.floor || '', room: record.roomNumber, trade: record.task, docNo: 'INS-' + record.id, docType: 'inspection', status: record.status, reason: record.remarks || '', updatedAt: new Date().toISOString() };
-    setInspectionRecords(current => [record, ...current]);
-    setRooms(current => current.map(currentRoom => {
-      if (String(currentRoom.roomNumber) !== String(record.roomNumber) || String(currentRoom.floor) !== String(base.floor) || canonicalBuilding(currentRoom.building, currentRoom.floor) !== base.building) return currentRoom;
-      const tasks = { ...currentRoom.tasks, [record.task]: record.status };
-      const passed = Object.values(tasks).filter(value => value === 'passed').length;
-      const defects = Object.values(tasks).filter(value => value === 'defect').length;
-      return { ...currentRoom, tasks, progress: Math.round(passed / TASKS_13.length * 100), defectsCount: defects, status: defects ? 'defect' : passed === TASKS_13.length ? 'ready' : 'inProgress', lastUpdate: record.date, lastInspector: record.inspector };
-    }));
-    await persistHistoryRecord(toHistoryLogRow({ ...base, id: record.id, fileName: evidence?.photo?.name || '' }), evidence?.photo || null);
-    if (evidence?.ri) await persistHistoryRecord(toHistoryLogRow({ ...base, id: record.id + '-ri', docNo: 'RI-' + record.id, docType: 'ri', fileName: evidence.ri.name }), evidence.ri);
-    showToast(lang === 'th' ? 'บันทึกผลตรวจห้อง ' + record.roomNumber + ' ในเครื่องแล้ว' : 'Inspection for room ' + record.roomNumber + ' saved on this device');
-  }, [session, rooms, persistHistoryRecord, lang]);
-
-  // KPI Computations
-  const stats = useMemo(() => {
-    const total = rooms.length;
-    const ready = rooms.filter(r => r.status === 'ready').length;
-    const defect = rooms.filter(r => r.status === 'defect').length;
-    const inProgress = rooms.filter(r => r.status === 'inProgress').length;
-    const pending = rooms.filter(r => r.status === 'pending').length;
-    return { total, ready, defect, inProgress, pending };
-  }, [rooms]);
-
-  // Filtered rooms
-  const filteredRooms = useMemo(() => {
-    return rooms.filter(room => {
-      const query = searchQuery.trim().toLowerCase();
-      const matchSearch = room.roomNumber.toLowerCase().includes(query) || room.type.toLowerCase().includes(query);
-      const matchFloor = selectedFloorFilter === 'all' || room.floor.toString() === selectedFloorFilter;
-      const matchStatus = selectedStatusFilter === 'all' || room.status === selectedStatusFilter;
-      return matchSearch && matchFloor && matchStatus;
-    });
-  }, [rooms, searchQuery, selectedFloorFilter, selectedStatusFilter]);
-
-  if (!session) return <LocalizedUI lang={lang}><LoginScreen lang={lang} t={t} setLang={setLang} onLogin={handleLogin} /></LocalizedUI>;
-
-  const isEngineer = session.role === 'engineer';
+  const logout = () => { updateData(current => ({ ...current, user: null })); setLoginPassword(''); setPage('login'); setOpenMenu(''); };
+  const go = nav => { setPage(nav); setSidebarOpen(false); setOpenMenu(''); };
   const navItems = [
-    { id: 'dashboard', icon: LayoutDashboard, label: t.nav.dashboard },
-    { id: 'floorStatus', icon: Grid, label: t.nav.floorStatus },
-    { id: 'newInspection', icon: ClipboardCheck, label: t.nav.newInspection, restricted: true },
-    { id: 'inspectionRecords', icon: History, label: t.nav.inspectionRecords },
-    { id: 'documentCenter', icon: FolderKanban, label: t.nav.documentCenter },
-    { id: 'aiAssistant', icon: Bot, label: t.nav.aiAssistant, badge: 'AI', restricted: true },
-  ].filter(item => isEngineer || !item.restricted);
-
-  return (
-    <LocalizedUI lang={lang}>
-    <div className="flex h-screen overflow-hidden bg-slate-900 font-sans text-slate-100">
-      {/* Toast Alert Banner */}
-      {toastMessage && (
-        <div role="status" className="fixed left-3 right-3 top-5 z-50 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-400 bg-emerald-700 px-4 py-3 text-white shadow-2xl sm:left-auto sm:right-5 sm:max-w-lg">
-          <CheckCircle2 className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 flex-1 text-sm font-medium">{toastMessage.message}</span>
-          {toastMessage.link && <a href={toastMessage.link} target="_blank" rel="noopener noreferrer" className="text-xs font-bold underline underline-offset-2">{t.documents.openFile}</a>}
-        </div>
-      )}
-
-      {/* --- SIDEBAR --- */}
-      {mobileMenuOpen && <button type="button" aria-label={lang === 'th' ? 'ปิดเมนู' : 'Close menu'} className="fixed inset-0 z-30 bg-black/60 md:hidden" onClick={() => setMobileMenuOpen(false)} />}
-      <aside className={`${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 flex-col border-r border-slate-800 bg-[#0B132B] transition-transform duration-200 md:static md:z-auto md:w-64 md:translate-x-0`}>
-        {/* Brand Header */}
-        <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-400 rounded-xl flex items-center justify-center text-emerald-400 font-extrabold text-xl shadow-inner">
-            🦖
-          </div>
-          <div>
-            <h1 className="font-bold text-base tracking-wide text-white">{t.appName}</h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-wider">{t.subTitle}</p>
-          </div>
-        </div>
-
-        {/* Project Context Box */}
-        <div className="mx-4 my-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700/60">
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
-            <Building2 className="w-4 h-4" />
-            <span>{project.name}</span>
-          </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-            <span>{lang === 'th' ? '8 ชั้น • 432 ห้อง' : '8 Floors • 432 Rooms'}</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          </div>
-        </div>
-
-        {/* Navigation Menu */}
-        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                  active 
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/30' 
-                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${active ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                </div>
-                {item.badge && (
-                  <span className="px-1.5 py-0.5 text-[9px] bg-emerald-400/20 text-emerald-300 font-bold rounded border border-emerald-400/30">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* User Info Footer */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-300 font-bold text-xs">
-              TC
-            </div>
-            <div className="text-left truncate">
-              <p className="text-xs font-semibold text-slate-200 truncate">{session.name}</p>
-              <p className="text-[10px] text-emerald-400">{session.role === 'engineer' ? t.role.engineer : t.role.viewer}</p>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* --- MAIN CONTENT AREA --- */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-900">
-        
-        {/* Top Header Bar */}
-        <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/30 px-3 py-2 sm:px-6">
-          <div className="flex min-w-0 flex-1 items-center gap-3 sm:max-w-md">
-            <button type="button" onClick={() => setMobileMenuOpen(true)} className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-200 md:hidden" aria-label={lang === 'th' ? 'เปิดเมนู' : 'Open menu'}><Menu className="h-4 w-4" /></button>
-            <div className="relative hidden w-full sm:block">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder={t.common.search}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-800/70 border border-slate-700/80 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="max-w-36 text-right sm:max-w-52"><p className="hidden truncate text-[10px] text-slate-400 md:block">{session.name}</p><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300">{session.role === 'engineer' ? t.role.engineer : t.role.viewer}</span></div>
-            <span className="hidden rounded-lg border border-slate-700 bg-slate-900/80 px-2 py-1.5 text-[9px] font-medium text-slate-400 md:inline">{lang === 'th' ? 'บันทึกในอุปกรณ์' : 'Saved locally'}</span>
-            {/* Language Switcher Button */}
-            <button
-              onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors"
-            >
-              <Languages className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{lang === 'th' ? 'TH | THAI' : 'EN | ENGLISH'}</span>
-            </button>
-
-            {/* Quick Action Notification Button */}
-            <button 
-              onClick={() => { setActiveTab('inspectionRecords'); showToast(t.records.title); }}
-              className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white relative"
-            >
-              <Bell className="w-4 h-4" />
-              <span className="w-2 h-2 rounded-full bg-red-500 absolute top-1 right-1"></span>
-            </button>
-            <button type="button" onClick={handleLogout} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700 sm:px-3" title={t.role.logout}><LogOut className="h-4 w-4" /><span className="hidden sm:inline">{t.role.logout}</span></button>
-          </div>
-          <div className="relative order-last w-full sm:hidden"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><input type="text" placeholder={t.common.search} value={searchQuery} onChange={event => setSearchQuery(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-800/70 py-2 pl-9 pr-3 text-xs text-slate-200 placeholder-slate-400 focus:border-emerald-500 focus:outline-none"/></div>
-        </header>
-
-        {/* View Content Renderer */}
-        <main className="flex-1 overflow-y-auto bg-[#0B132B] p-3 sm:p-6">
-          {activeTab === 'dashboard' && (
-            <DashboardView 
-              t={t} 
-              lang={lang}
-              stats={stats} 
-              rooms={rooms}
-              visibleRooms={filteredRooms}
-              onInspectRoom={(r) => setModalRoom(r)} 
-              setSelectedStatusFilter={setSelectedStatusFilter}
-              selectedFloor={selectedFloorFilter}
-              setSelectedFloor={setSelectedFloorFilter}
-              projectName={project.name}
-            />
-          )}
-
-          {activeTab === 'floorStatus' && (
-            <FloorStatusView 
-              t={t} 
-              rooms={filteredRooms} 
-              selectedFloor={selectedFloorFilter} 
-              setSelectedFloor={setSelectedFloorFilter}
-              selectedStatusFilter={selectedStatusFilter}
-              setSelectedStatusFilter={setSelectedStatusFilter}
-              onInspectRoom={(r) => setModalRoom(r)} 
-              handoverHeatmap={<HandoverDashboardView t={t} lang={lang} rooms={rooms} selectedFloor={selectedFloorFilter} selectedStatusFilter={selectedStatusFilter} onInspectRoom={(r) => setModalRoom(r)} showToast={showToast} />}
-            />
-          )}
-
-          {activeTab === 'newInspection' && (
-            <RoomInspectionFormView t={t} lang={lang} showToast={showToast} rooms={rooms} onSubmitInspection={submitInspection} />
-          )}
-
-          {activeTab === 'inspectionRecords' && (
-            <InspectionRecordsView t={t} lang={lang} rooms={rooms} records={inspectionRecords} onInspectRoom={(r) => setModalRoom(r)} />
-          )}
-
-          {activeTab === 'documentCenter' && (
-            <DocumentCenterView t={t} lang={lang} showToast={showToast} rooms={rooms} inspections={inspectionRecords} canEdit={isEngineer} userName={session.name} onRecordSaved={persistHistoryRecord} />
-          )}
-
-          {activeTab === 'aiAssistant' && (
-            <AIAssistantView t={t} showToast={showToast} />
-          )}
-
-        </main>
-      </div>
-
-      {/* --- GLOBAL ROOM INSPECTION MODAL --- */}
-      {modalRoom && <RoomDetailModal room={modalRoom} t={t} lang={lang} records={inspectionRecords} showToast={showToast} onClose={() => setModalRoom(null)} />}
-    </div>
-    </LocalizedUI>
-  );
-}
-
-// ==========================================
-// SIGN-IN SCREEN
-// ==========================================
-function LoginScreen({ lang, t, setLang, onLogin }) {
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('engineer');
-  const [project, setProject] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('trex-project'))?.id || PROJECT_OPTIONS[0].id; }
-    catch { return PROJECT_OPTIONS[0].id; }
-  });
-  const submit = event => {
-    event.preventDefault();
-    const cleanName = name.trim();
-    if (!cleanName) return;
-    onLogin({ name: cleanName, role, project: PROJECT_OPTIONS.find(item => item.id === project) || PROJECT_OPTIONS[0] });
-  };
-  return <main className="flex min-h-screen items-center justify-center bg-[#0B132B] p-4 text-slate-100 sm:p-6">
-    <section className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-700 bg-slate-800/90 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-slate-700 p-5 sm:p-6">
-        <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl border border-emerald-400 bg-emerald-500/20 text-2xl">🦖</div><div><h1 className="text-lg font-bold text-white">{t.appName}</h1><p className="text-xs text-slate-400">{t.auth.subtitle}</p></div></div>
-        <button type="button" onClick={() => setLang(lang === 'th' ? 'en' : 'th')} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200">{lang === 'th' ? 'TH | EN' : 'EN | TH'}</button>
-      </div>
-      <form onSubmit={submit} className="space-y-5 p-5 sm:p-6">
-        <div><h2 className="text-xl font-bold">{t.auth.title}</h2><p className="mt-1 text-xs text-slate-400">{t.subTitle}</p></div>
-        <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-300">{t.auth.project}</span><select value={project} onChange={event => setProject(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-3 text-sm text-slate-100">{PROJECT_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
-        <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-300">{t.auth.name}</span><input autoComplete="name" required value={name} onChange={event => setName(event.target.value)} placeholder={t.auth.namePlaceholder} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none" /></label>
-        <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold text-slate-300">{t.auth.role}</legend>
-          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${role === 'engineer' ? 'border-emerald-500 bg-emerald-950/30' : 'border-slate-700 bg-slate-900/60'}`}><input type="radio" name="role" value="engineer" checked={role === 'engineer'} onChange={() => setRole('engineer')} className="mt-1 accent-emerald-500" /><span><b className="block text-sm text-slate-100">{t.auth.engineer}</b><small className="mt-1 block text-xs leading-relaxed text-slate-400">{t.auth.engineerAccess}</small></span></label>
-          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${role === 'viewer' ? 'border-sky-500 bg-sky-950/30' : 'border-slate-700 bg-slate-900/60'}`}><input type="radio" name="role" value="viewer" checked={role === 'viewer'} onChange={() => setRole('viewer')} className="mt-1 accent-sky-500" /><span><b className="block text-sm text-slate-100">{t.auth.viewer}</b><small className="mt-1 block text-xs leading-relaxed text-slate-400">{t.auth.viewerAccess}</small></span></label>
-        </fieldset>
-        <button type="submit" className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500">{t.auth.login}</button>
-      </form>
-    </section>
-  </main>;
-}
-
-// ==========================================
-// MODULE 1: DASHBOARD VIEW
-// ==========================================
-function DashboardView({ t, lang, stats, rooms, visibleRooms, onInspectRoom, setSelectedStatusFilter, selectedFloor, setSelectedFloor, projectName }) {
-  const [chartMode, setChartMode] = useState('floor');
-  const roomList = selectedFloor === 'all' ? visibleRooms : visibleRooms.filter(room => String(room.floor) === String(selectedFloor));
-  const floors = [1, 2, 3, 4, 5, 6, 7, 8];
-  const statusCounts = [
-    { key: 'defect', label: t.dashboard.legend.failed, value: stats.defect, color: '#ef3340' },
-    { key: 'pending', label: t.dashboard.legend.pending, value: stats.pending, color: '#9aa3af' },
-    { key: 'ready', label: t.dashboard.legend.passed, value: stats.ready, color: '#32bd83' },
-    { key: 'inProgress', label: t.dashboard.legend.ready, value: stats.inProgress, color: '#3f7df5' },
+    { id: 'overview', label: 'Project Overview', thai: 'ภาพรวมโครงการ', icon: Home },
+    { id: 'requests', label: 'Request & Schedule', thai: 'คำขอและตารางนัดตรวจ', icon: CalendarDays },
+    { id: 'inspections', label: 'Inspections', thai: 'การตรวจงาน', icon: ClipboardCheck },
+    { id: 'documents', label: 'Document', thai: 'เอกสาร', icon: FolderOpen },
   ];
-  const donutTotal = Math.max(1, rooms.length);
-  let currentStop = 0;
-  const donutGradient = statusCounts.map(item => {
-    const start = currentStop;
-    currentStop += (item.value / donutTotal) * 100;
-    return `${item.color} ${start}% ${currentStop}%`;
-  }).join(', ');
-  const criticalRooms = rooms.filter(room => room.status === 'defect').slice(0, 6);
-  const onStatusSelect = (key) => setSelectedStatusFilter(key === 'ready' ? 'ready' : key);
+  const floors = Array.from({ length: Math.min(project.floors, 12) }, (_, i) => i + 1);
+  const eventsForRoom = room => projectEvents.filter(e => String(e.room) === String(room));
+  const roomStatus = room => { const records = eventsForRoom(room); if (records.some(e => e.result === 'Fail')) return 'Fail'; if (records.some(e => e.result === 'Pass')) return 'Pass'; if (projectRequests.some(r => r.rooms.includes(String(room)))) return 'Scheduled'; return 'Pending'; };
+  const overviewStats = useMemo(() => {
+    const passed = projectEvents.filter(e => e.result === 'Pass').length;
+    const failed = projectEvents.filter(e => e.result === 'Fail').length;
+    return { total: project.rooms, passed: Math.min(project.rooms, Math.round(project.rooms * 0.41) + passed), defects: Math.max(6, failed + 5), scheduled: projectRequests.filter(r => r.status === 'Scheduled' || r.status === 'Partially Inspected').reduce((sum, r) => sum + r.rooms.length, 0) };
+  }, [project.rooms, projectEvents, projectRequests]);
 
-  return (
-    <div className="-m-3 min-h-full space-y-4 bg-[#0B132B] p-3 text-slate-100 sm:-m-6 sm:p-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="m-0 text-xl font-bold tracking-normal text-slate-100">{t.dashboard.title}</h1><p className="mt-1 text-xs text-slate-400">{projectName} · {lang === 'th' ? 'โครงการก่อสร้าง' : 'Construction Project'}</p></div>
-        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">● {t.dashboard.liveSync}</span>
-      </header>
+  if (page === 'login') return <LoginScreen name={loginName} setName={setLoginName} password={loginPassword} setPassword={setLoginPassword} onSubmit={login} toast={toast}/>;
+  if (page === 'sites') return <SitesScreen user={data.user} choice={projectChoice} setChoice={setProjectChoice} onNext={() => { changeProject(projectChoice); setPage('overview'); }} onLogout={logout}/>;
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {[
-          { label: t.dashboard.totalRooms, value: stats.total, filter: 'all', color: '#64748b', icon: Building2 },
-          { label: t.dashboard.passed, value: stats.ready, filter: 'ready', color: '#32bd83', icon: CheckCircle2 },
-          { label: t.dashboard.failed, value: stats.defect, filter: 'defect', color: '#ef3340', icon: AlertTriangle },
-          { label: t.dashboard.readyForInspection, value: stats.inProgress, filter: 'inProgress', color: '#3f7df5', icon: Clock },
-          { label: t.dashboard.notSubmitted, value: stats.pending, filter: 'pending', color: '#9aa3af', icon: ClipboardCheck },
-        ].map(card => {
-          const Icon = card.icon;
-          return <button key={card.label} onClick={() => setSelectedStatusFilter(card.filter)} className="flex min-h-20 items-center justify-between rounded-lg border border-slate-700 bg-[#1C2541] px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-500 hover:shadow-md" style={{ borderLeft: `3px solid ${card.color}` }}>
-            <div><div className="text-[11px] font-medium text-slate-300">{card.label}</div><div className="mt-1 text-2xl font-bold leading-none" style={{ color: card.color }}>{card.value}</div></div><Icon className="h-5 w-5" style={{ color: card.color }} />
-          </button>;
-        })}
-      </section>
-
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr]">
-        <div className="rounded-lg border border-slate-700 bg-[#1C2541] p-4 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-100">{t.dashboard.floorStatus}</h2>
-          {chartMode === 'floor' ? <>
-            <div className="w-full overflow-x-auto"><svg viewBox="0 0 760 190" role="img" aria-label={t.dashboard.floorStatus} className="h-48 min-w-[620px] w-full">
-              {[0, 7, 14, 21, 28].map(tick => { const y = 155 - tick * 4.7; return <g key={tick}><line x1="48" x2="748" y1={y} y2={y} stroke="#e6e9ee" strokeDasharray="2 3"/><text x="39" y={y + 4} textAnchor="end" fill="#8791a0" fontSize="10">{tick}</text></g>; })}
-              {floors.map((floor, index) => {
-                const floorRooms = rooms.filter(room => room.floor === floor);
-                const groups = [
-                  { status: 'ready', color: '#32bd83' }, { status: 'defect', color: '#ef3340' },
-                  { status: 'inProgress', color: '#3f7df5' }, { status: 'pending', color: '#9aa3af' },
-                ];
-                let yBottom = 155;
-                const x = 84 + index * 82;
-                return <g key={floor}>
-                  {groups.map(group => { const count = floorRooms.filter(room => room.status === group.status).length; const height = count * 4.7; yBottom -= height; return count ? <rect key={group.status} x={x} y={yBottom} width="22" height={height} rx="1" fill={group.color}><title>{`Floor ${floor}: ${count} ${group.status}`}</title></rect> : null; })}
-                  <text x={x + 11} y="174" textAnchor="middle" fill="#687386" fontSize="10">F{floor}</text>
-                </g>;
-              })}
-              <line x1="48" x2="748" y1="155" y2="155" stroke="#9aa3af"/>
-            </svg></div>
-            <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-2 text-[10px]">{statusCounts.map(item => <span key={item.key} className="inline-flex items-center gap-1.5 text-slate-300"><i className="h-2 w-2 rounded-sm" style={{ background: item.color }} />{item.label}</span>)}</div>
-          </> : <div className="grid grid-cols-2 gap-3 py-4 sm:grid-cols-4">{TASKS_13.slice(0, 4).map(task => { const count = rooms.reduce((sum, room) => sum + (room.tasks?.[task] === 'defect' ? 1 : 0), 0); return <div key={task} className="rounded-md border border-slate-700 bg-[#111b34] p-3"><div className="text-xs text-slate-300">{taskLabel(task, lang)}</div><div className="mt-2 text-lg font-bold text-rose-400">{count} {t.dashboard.failed}</div></div>; })}</div>}
-          <div className="mt-3 flex justify-end gap-1"><button onClick={() => setChartMode('floor')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'floor' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Floor Status</button><button onClick={() => setChartMode('trade')} className={`rounded px-3 py-1.5 text-[10px] ${chartMode === 'trade' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Trade Defects</button></div>
+  return <div className="min-h-screen bg-[#F7F8F7] text-slate-800">
+    <div className="flex min-h-screen">
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-[264px] -translate-x-full flex-col bg-[#0B1A12] px-4 py-5 text-white transition-transform lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : ''}`}>
+        <div className="flex items-center gap-3 px-2"><div className="grid h-10 w-10 place-items-center rounded-xl bg-lime-400 text-emerald-950"><Building2 size={22}/></div><div><b className="block text-[15px] tracking-wide">T-REX</b><span className="text-[10px] text-emerald-100/65">TRACKING & REPORT EXPERT</span></div><button className="ml-auto rounded-md p-1 lg:hidden" onClick={() => setSidebarOpen(false)}><X size={19}/></button></div>
+        <div className="mt-8 px-2 text-[10px] font-bold uppercase tracking-[.16em] text-emerald-100/45">Project workspace</div>
+        <nav className="mt-3 space-y-1">{navItems.map(item => { const Icon = item.icon; const active = page === item.id; return <button key={item.id} onClick={() => go(item.id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ${active ? 'bg-lime-400 text-emerald-950 shadow-md shadow-lime-950/20' : 'text-emerald-50/75 hover:bg-white/8 hover:text-white'}`}><Icon size={18}/><span>{item.label}<span className={`mt-0.5 block text-[10px] font-medium ${active ? 'text-emerald-900/75' : 'text-emerald-100/45'}`}>{item.thai}</span></span></button>; })}</nav>
+        <div className="mt-auto rounded-2xl border border-white/10 bg-white/[.04] p-3"><div className="flex items-center gap-2"><ShieldCheck size={17} className="text-lime-300"/><span className="text-xs font-semibold">{canEdit ? 'Full access' : 'Read only'}</span></div><p className="mt-1 text-[10px] leading-4 text-emerald-100/60">{canEdit ? 'Site Engineer permissions enabled' : 'Viewer can view and download only'}</p></div>
+      </aside>
+      {sidebarOpen && <button aria-label="Close navigation" className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setSidebarOpen(false)}/>}
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-0 z-20 flex min-h-[72px] items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur lg:px-8">
+          <button className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setSidebarOpen(true)}><Menu size={20}/></button>
+          <div className="relative"><button onClick={() => setOpenMenu(openMenu === 'project' ? '' : 'project')} className="flex items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-slate-50"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Building2 size={18}/></span><span className="hidden sm:block"><b className="block max-w-[260px] truncate text-sm">{project.name}</b><span className="text-[10px] font-medium text-slate-400">{project.id} · Active Project</span></span><ChevronDown size={16} className="text-slate-400"/></button>{openMenu === 'project' && <div className="absolute left-0 top-12 z-30 w-72 rounded-2xl border border-slate-100 bg-white p-2 shadow-xl">{PROJECTS.map(p => <button key={p.id} onClick={() => changeProject(p.id)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left hover:bg-slate-50"><span><b className="block text-xs">{p.name}</b><small className="text-[10px] text-slate-400">{p.id}</small></span>{project.id === p.id && <Check size={15} className="text-emerald-600"/>}</button>)}</div>}</div>
+          <div className="ml-auto flex items-center gap-2 sm:gap-4"><div className="relative"><button onClick={() => { setOpenMenu(openMenu === 'notifications' ? '' : 'notifications'); updateData(c => ({ ...c, notifications: c.notifications.map(n => ({ ...n, read: true })) })); }} className="relative rounded-xl p-2.5 text-slate-500 hover:bg-slate-100"><Bell size={19}/>{data.notifications.some(n => !n.read) && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white"/>}</button>{openMenu === 'notifications' && <div className="absolute right-0 top-12 z-30 w-[min(340px,90vw)] rounded-2xl border border-slate-100 bg-white p-3 shadow-xl"><b className="px-2 text-xs">Notifications</b>{data.notifications.map(n => <div key={n.id} className="mt-2 rounded-xl bg-slate-50 p-3"><p className="text-xs font-semibold">{n.title}</p><p className="mt-1 text-[10px] text-slate-500">{n.detail}</p></div>)}</div>}</div>
+            <div className="relative"><button onClick={() => setOpenMenu(openMenu === 'profile' ? '' : 'profile')} className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-slate-50"><span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-950 text-xs font-bold text-lime-300">{data.user?.name?.split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase() || 'PS'}</span><span className="hidden text-left md:block"><b className="block max-w-[155px] truncate text-xs">{data.user?.name}</b><small className="text-[10px] text-slate-400">{data.user?.role}</small></span><ChevronDown size={14} className="hidden text-slate-400 sm:block"/></button>{openMenu === 'profile' && <div className="absolute right-0 top-12 z-30 w-64 rounded-2xl border border-slate-100 bg-white p-4 shadow-xl"><b className="block text-sm">{data.user?.name}</b><p className="mt-1 text-xs text-slate-500">{data.user?.role}</p><p className="mt-1 break-all text-[10px] text-slate-400">{data.user?.email}</p><hr className="my-3 border-slate-100"/><Button variant="secondary" className="w-full" onClick={logout}><LogOut size={15}/>Log Out</Button></div>}</div>
+          </div>
+        </header>
+        <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+          {page === 'overview' && <Overview project={project} floors={floors} selectedFloor={selectedFloor} setSelectedFloor={setSelectedFloor} selectedRoom={selectedRoom} setSelectedRoom={setSelectedRoom} events={projectEvents} requests={projectRequests} roomStatus={roomStatus} eventsForRoom={eventsForRoom} stats={overviewStats}/>}
+          {page === 'requests' && <RequestSchedule project={project} requests={projectRequests} filter={requestFilter} setFilter={setRequestFilter} search={requestSearch} setSearch={setRequestSearch} month={calendarMonth} setMonth={setCalendarMonth} todayValue={todayValue} canEdit={canEdit} onCreate={() => { if (requireEdit()) setModal({ type: 'request' }); }} onOpen={r => setModal({ type: 'request-detail', request: r })} onReschedule={r => { if (requireEdit()) setModal({ type: 'request', request: r }); }}/ >}
+          {page === 'inspections' && <InspectionsPage project={project} requests={projectRequests} events={projectEvents} view={inspectionView} setView={setInspectionView} canEdit={canEdit} drafts={data.drafts.filter(d => d.projectId === project.id)} onInspect={(request, event) => { if (!requireEdit()) return; setModal({ type: 'inspection', request, event }); }} onResumeDraft={draft => { const request = projectRequests.find(r => r.id === draft.requestId); if (requireEdit() && request) setModal({ type: 'inspection', request, draft }); }} onView={event => setModal({ type: 'event-detail', event })} onDeleteDraft={id => updateData(c => ({ ...c, drafts: c.drafts.filter(d => d.id !== id) }))}/>}
+          {page === 'documents' && <DocumentsPage project={project} events={projectEvents} requests={projectRequests} docs={projectDocs} packs={data.packs.filter(p => p.projectId === project.id)} canEdit={canEdit} search={docSearch} setSearch={setDocSearch} filters={docFilters} setFilters={setDocFilters} onUpload={() => { if (requireEdit()) setModal({ type: 'document' }); }} onEdit={doc => { if (requireEdit()) setModal({ type: 'document', doc }); }} onDelete={doc => { if (requireEdit()) setModal({ type: 'delete-doc', doc }); }} onView={doc => setModal({ type: 'document-detail', doc })} onPacks={packs => updateData(c => ({ ...c, packs: [...packs, ...c.packs.filter(p => p.projectId !== project.id)] }))} summarySearch={summarySearch} setSummarySearch={setSummarySearch} onToast={showToast}/>}
         </div>
-
-        <div className="rounded-lg border border-slate-700 bg-[#1C2541] p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-100">{t.dashboard.resultSummary}</h2>
-          <div className="my-3 flex justify-center"><div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: `conic-gradient(${donutGradient})` }}><div className="grid h-16 w-16 place-items-center rounded-full bg-[#0B132B] text-xs font-bold text-slate-200">{stats.total}</div></div></div>
-          <div className="space-y-1.5">{statusCounts.map(item => <button key={item.key} onClick={() => onStatusSelect(item.key)} className="flex w-full items-center justify-between gap-2 text-left text-[10px] text-slate-300 hover:text-white"><span className="flex min-w-0 items-center gap-1.5"><i className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.color }} /><span className="truncate">{item.label}</span></span><b className="text-slate-100">{item.value}</b></button>)}</div>
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-slate-700 bg-[#1C2541] p-4 shadow-sm">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-100"><AlertTriangle className="h-4 w-4 text-rose-400" />{t.dashboard.criticalRooms}</h2>
-        {criticalRooms.length ? <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">{criticalRooms.map((room, index) => {
-          const task = TASKS_13.find(name => room.tasks?.[name] === 'defect');
-          return <button key={room.id} onClick={() => onInspectRoom(room)} className="flex items-center gap-2 rounded-md border border-rose-900/70 bg-rose-950/30 p-2 text-left transition hover:border-rose-700"><span className="grid h-8 w-8 shrink-0 place-items-center rounded bg-rose-600 text-[10px] font-bold text-white">{room.roomNumber}</span><span className="min-w-0"><b className="block text-[10px] text-slate-100">{t.dashboard.room} {room.roomNumber}</b><small className="block truncate text-[9px] text-rose-300">{t.dashboard.defects[index % t.dashboard.defects.length]}{task ? ` · ${taskLabel(task, lang)}` : ''}</small></span></button>;
-        })}</div> : <p className="text-xs text-slate-500">{t.dashboard.failed}: 0</p>}
-      </section>
-
-      {/* Preserve the existing quick inspection list below the reference dashboard panels. */}
-      <div className="overflow-hidden rounded-lg border border-slate-700 bg-[#1C2541] shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-700/80 p-4">
-          <h3 className="text-sm font-semibold text-slate-100">{lang === 'th' ? 'รายการตรวจห้องพัก' : 'Room Inspection List'}</h3>
-          <div className="flex flex-wrap items-center justify-end gap-2"><label className="flex items-center gap-2 text-[10px] text-slate-300"><span>{lang === 'th' ? 'ชั้น' : 'Floor'}</span><select value={selectedFloor} onChange={event => setSelectedFloor(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกชั้น' : 'All Floors'}</option>{FLOORS.map(floor => <option key={floor} value={String(floor)}>{lang === 'th' ? `ชั้น ${floor}` : `Floor ${floor}`}</option>)}</select></label><span className="text-xs text-slate-400">{lang === 'th' ? `แสดงผล ${roomList.length} ห้อง` : `Showing ${roomList.length} rooms`}</span></div>
-        </div>
-        <div className="overflow-x-auto max-h-96">
-          <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-[#101a33] text-[11px] uppercase text-slate-300">
-              <tr>
-                <th className="p-3 pl-4">ห้องพัก</th>
-                <th className="p-3">ประเภทห้อง</th>
-                <th className="p-3">ชั้น</th>
-                <th className="p-3">ความคืบหน้า (13 งาน)</th>
-                <th className="p-3">สถานะ</th>
-                <th className="p-3 text-right pr-4">การจัดการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/70 text-xs text-slate-300">
-              {roomList.slice(0, 15).map(room => (
-                <tr key={room.id} className="transition-colors hover:bg-slate-700/50">
-                  <td className="p-3 pl-4 font-bold text-emerald-300">{room.roomNumber}<small className="ml-2 text-[9px] font-medium text-slate-500">{room.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA}</small></td>
-                  <td className="p-3">{room.type}</td>
-                  <td className="p-3">ชั้น {room.floor}</td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-2 rounded-full bg-slate-900">
-                        <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${room.progress}%` }}></div>
-                      </div>
-                      <span className="text-[10px] text-slate-400">{room.progress}%</span>
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <StatusBadge status={room.status} t={t} />
-                  </td>
-                  <td className="p-3 text-right pr-4">
-                    <button 
-                      onClick={() => onInspectRoom(room)}
-                      className="inline-flex items-center gap-1 rounded bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700"
-                    >
-                      <Eye className="w-3 h-3 text-emerald-400" />
-                      <span>{t.common.details}</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </main>
     </div>
-  );
+    {modal && <AppModal modal={modal} project={project} floors={floors} requests={projectRequests} events={projectEvents} user={data.user} updateData={updateData} onClose={() => { setModal(null); stopCamera(); }} onToast={showToast} onCamera={startCamera} onStopCamera={stopCamera} onCapture={capturePhoto} videoRef={videoRef} cameraState={cameraState}/>}
+    {toast && <div role="status" className="fixed bottom-5 left-1/2 z-[80] -translate-x-1/2 rounded-xl bg-emerald-950 px-4 py-3 text-xs font-semibold text-white shadow-xl">{toast}</div>}
+  </div>;
+
+  async function startCamera() {
+    if (!requireEdit()) return;
+    setCameraState('requesting');
+    if (!navigator.mediaDevices?.getUserMedia) { setCameraState('unavailable'); showToast('Camera unavailable. Choose image files instead.'); return; }
+    try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); streamRef.current = stream; setCameraState('active'); setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = stream; }, 40); }
+    catch { setCameraState('unavailable'); showToast('Camera permission unavailable. Choose image files instead.'); }
+  }
+  function stopCamera() { if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop()); streamRef.current = null; setCameraState(''); }
+  function capturePhoto() { const video = videoRef.current; if (!video || !video.videoWidth) { showToast('Camera is not ready.'); return; } const canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight; canvas.getContext('2d')?.drawImage(video, 0, 0); const photo = { id: uid(), name: `site-photo-${Date.now()}.jpg`, type: 'image/jpeg', dataUrl: canvas.toDataURL('image/jpeg', .85) }; window.dispatchEvent(new CustomEvent('trex-add-photo', { detail: photo })); showToast('Photo attached to inspection.'); }
 }
 
-// ==========================================
-// MODULE 2: FLOOR STATUS VIEW
-// ==========================================
-function FloorStatusView({ t, rooms, selectedFloor, setSelectedFloor, selectedStatusFilter, setSelectedStatusFilter, onInspectRoom, handoverHeatmap }) {
-  const floors = [1, 2, 3, 4, 5, 6, 7, 8];
-
-  const currentFloorRooms = useMemo(() => {
-    if (selectedFloor === 'all') return rooms;
-    return rooms.filter(r => r.floor.toString() === selectedFloor);
-  }, [rooms, selectedFloor]);
-
-  return (
-    <div className="space-y-6">
-      {/* Floor Filter Controls */}
-      <div className="flex items-center justify-between bg-slate-800/70 p-4 rounded-xl border border-slate-700">
-        <div>
-          <h2 className="font-bold text-base text-slate-100">ผังแสดงสถานะห้องพักรายชั้น (Floor Grid Selector)</h2>
-          <p className="text-xs text-slate-400">คลิกที่ห้องพักเพื่อตรวจเช็คสถานะละเอียด</p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            onClick={() => setSelectedFloor('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
-              selectedFloor === 'all' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'
-            }`}
-          >
-            {t.common.filterAll}
-          </button>
-          {floors.map(f => (
-            <button
-              key={f}
-              onClick={() => setSelectedFloor(f.toString())}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
-                selectedFloor === f.toString() ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'
-              }`}
-            >
-              ชั้น {f}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/70 p-3">
-        <span className="mr-1 text-xs font-semibold text-slate-300">{t.dashboard.resultSummary}:</span>
-        {[['all', t.common.filterAll], ['ready', t.dashboard.legend.passed], ['defect', t.dashboard.legend.failed], ['inProgress', t.dashboard.legend.ready], ['pending', t.dashboard.legend.pending]].map(([key, label]) => (
-          <button key={key} onClick={() => setSelectedStatusFilter(key)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${selectedStatusFilter === key ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}>{label}</button>
-        ))}
-      </div>
-
-      {/* Grid Layout */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-3">
-        {currentFloorRooms.map(room => (
-          <div
-            key={room.id}
-            onClick={() => onInspectRoom(room)}
-            className={`p-3 rounded-xl border transition-all cursor-pointer hover:scale-105 flex flex-col justify-between h-24 relative overflow-hidden ${
-              room.status === 'ready' 
-                ? 'bg-emerald-950/40 border-emerald-500/50 hover:border-emerald-400' 
-                : room.status === 'defect'
-                ? 'bg-red-950/40 border-red-500/50 hover:border-red-400'
-                : 'bg-slate-800/80 border-slate-700 hover:border-slate-500'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-sm text-slate-100">{room.roomNumber}</span>
-              {room.status === 'ready' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-              {room.status === 'defect' && <AlertTriangle className="w-4 h-4 text-red-400" />}
-              {room.status === 'inProgress' && <Clock className="w-4 h-4 text-amber-400" />}
-              {room.status === 'pending' && <ClipboardCheck className="w-4 h-4 text-slate-400" />}
-            </div>
-
-            <div className="text-[10px] text-slate-400 truncate">{room.type}</div>
-
-            <div className="space-y-1">
-              <div className="flex justify-between text-[9px] text-slate-400">
-                <span>Progress</span>
-                <span className="font-bold text-slate-200">{room.progress}%</span>
-              </div>
-              <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
-                <div 
-                  className={`h-full ${
-                    room.status === 'ready' ? 'bg-emerald-500' : room.status === 'defect' ? 'bg-red-500' : room.status === 'pending' ? 'bg-slate-500' : 'bg-amber-500'
-                  }`}
-                  style={{ width: `${room.progress}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      {handoverHeatmap}
-    </div>
-  );
-}
-
-// ==========================================
-// MODULE 3: NEW INSPECTION FORM
-// ==========================================
-function RoomInspectionFormView({ t, lang, showToast, rooms, onSubmitInspection }) {
-  const labels = i18n[lang].form;
-  const taskOptions = lang === 'th' ? TASKS_13_TH : TASKS_13;
-  const [selectedRoom, setSelectedRoom] = useState(rooms[0]?.id || '101');
-  const [taskName, setTaskName] = useState(TASKS_13[0]);
-  const [status, setStatus] = useState('passed');
-  const [inspectorName, setInspectorName] = useState('');
-  const [remarks, setRemarks] = useState('');
-  
-  // AI Simulation States
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [photoFile, setPhotoFile] = useState(null);
-  const [aiScore, setAiScore] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [riDocuments] = useState(() => { try { return (JSON.parse(localStorage.getItem('trex-documents') || '[]') || []).filter(doc => doc.documentType === 'ri'); } catch { return []; } });
-  const [selectedRiId, setSelectedRiId] = useState('');
-  const [riPreviewUrl, setRiPreviewUrl] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const selectedRoomInfo = rooms.find(room => String(room.id) === String(selectedRoom)) || rooms[0];
-  const selectedRiDocument = riDocuments.find(doc => String(doc.id) === String(selectedRiId));
-  useEffect(() => () => { if (riPreviewUrl) URL.revokeObjectURL(riPreviewUrl); }, [riPreviewUrl]);
-  const previewRiDocument = async () => {
-    if (!selectedRiDocument) return;
-    if (selectedRiDocument.file_url) { window.open(selectedRiDocument.file_url, '_blank', 'noopener,noreferrer'); return; }
-    try {
-      const blob = await loadInspectionEvidence(selectedRiDocument.id, 'photo');
-      if (!blob) throw new Error('RI document file is not available in local storage');
-      if (riPreviewUrl) URL.revokeObjectURL(riPreviewUrl);
-      setRiPreviewUrl(URL.createObjectURL(blob));
-    } catch (error) {
-      console.error('Could not preview saved RI document:', error);
-      showToast(lang === 'th' ? 'ไม่พบไฟล์เอกสาร RI ในอุปกรณ์นี้' : 'RI document file is not available on this device');
-    }
-  };
-
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file && file.size > MAX_UPLOAD_BYTES) {
-      showToast(t.storage.fileTooLarge);
-      e.target.value = '';
-      return;
-    }
-    if (file) {
-      if (photoPreview) URL.revokeObjectURL(photoPreview);
-      setPhotoFile(file);
-      setPhotoPreview(URL.createObjectURL(file));
-      // Simulate AI analysis
-      setTimeout(() => {
-        setAiScore({
-          quality: "96% High Resolution",
-          clarity: "Passed (No blur)",
-          defectDetected: false
-        });
-      }, 600);
-    }
-  };
-
-  const handleVoiceRecord = () => {
-    setIsRecording(true);
-    setTimeout(() => {
-      setIsRecording(false);
-      setRemarks(lang === 'th' ? "การทาสี Finish Paint 1 พื้นผิวเรียบเนียน ไม่พบรอยด่างหรือรอยแปรง ตรวจสอบผ่าน" : "Finish Paint 1 is smooth, with no blemishes or brush marks. Inspection passed.");
-      showToast(lang === 'th' ? "แปลงเสียงเป็นข้อความสำเร็จ (Voice transcribed)" : "Voice transcription completed.");
-    }, 2500);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    const id = crypto.randomUUID();
-    setIsSubmitting(true);
-    try {
-      await onSubmitInspection({ id, roomNumber: selectedRoomInfo?.roomNumber, building: selectedRoomInfo?.building, floor: selectedRoomInfo?.floor, task: taskName, status, remarks, date: new Date().toISOString(), inspector: inspectorName.trim(), photo: photoFile ? { name: photoFile.name, type: photoFile.type } : null, riDocument: selectedRiDocument ? { id: selectedRiDocument.id, doc_no: selectedRiDocument.reference || '', reference: selectedRiDocument.reference || '', name: selectedRiDocument.file_name || selectedRiDocument.name, type: 'application/pdf', file_url: selectedRiDocument.file_url || '', folder_path: selectedRiDocument.folder_path || '', document_id: selectedRiDocument.id, scheduledDate: selectedRiDocument.scheduledDate, building: selectedRiDocument.building, floor: selectedRiDocument.floor, roomNumber: selectedRiDocument.roomNumber } : null }, { photo: photoFile });
-    setRemarks('');
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-    setPhotoPreview(null);
-    setPhotoFile(null);
-    setAiScore(null);
-    setSelectedRiId('');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-slate-100">{labels.inspectionTitle}</h2>
-        <p className="text-xs text-slate-400">บันทึกผลการตรวจสอบ 13 งาน พร้อมระบบ AI ช่วยวิเคราะห์รูปภาพและบันทึกเสียง</p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">{labels.room}</label>
-            <select 
-              value={selectedRoom}
-              onChange={(e) => setSelectedRoom(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-            >
-              {rooms.map(r => (
-                <option key={r.id} value={r.id}>{labels.roomOption(r.roomNumber, r.floor, r.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA)}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">{labels.task}</label>
-            <select 
-              value={taskName}
-              onChange={(e) => setTaskName(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-            >
-              {TASKS_13.map((task, index) => (
-                <option key={task} value={task}>{taskOptions[index]}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">{labels.result}</label>
-            <select 
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-            >
-              <option value="passed">{labels.passed}</option>
-              <option value="defect">{labels.defect}</option>
-              <option value="inProgress">{labels.inProgress}</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="inspector-name" className="mb-1 block text-xs font-medium text-slate-300">{labels.inspector}</label>
-            <input id="inspector-name" name="inspectorName" type="text" required value={inspectorName} onChange={event => setInspectorName(event.target.value)} placeholder={labels.inspector} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none" />
-          </div>
-        </div>
-
-        {/* Photo Upload with AI Scanner */}
-        <div className="border-2 border-dashed border-slate-700 rounded-xl p-4 bg-slate-900/40 text-center">
-          <input type="file" accept="image/*" onChange={handlePhotoUpload} id="photo-upload" className="hidden" />
-          <label htmlFor="photo-upload" className="cursor-pointer flex flex-col items-center justify-center">
-            <Camera className="w-8 h-8 text-emerald-400 mb-2" />
-            <span className="text-xs font-medium text-slate-200">{labels.photo}</span>
-            <span className="text-[10px] text-slate-400">รองรับ PNG, JPG พร้อม AI ประเมินคุณภาพภาพ</span>
-          </label>
-
-          {photoPreview && (
-            <div className="mt-4 flex flex-col md:flex-row items-center gap-4 bg-slate-800 p-3 rounded-lg border border-slate-700">
-              <img src={photoPreview} alt="Preview" className="w-32 h-24 object-cover rounded-md border border-slate-600" />
-              {aiScore && (
-                <div className="text-left text-xs space-y-1">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                    <Sparkles className="w-4 h-4" />
-                    <span>AI Image Quality Score: {aiScore.quality}</span>
-                  </div>
-                  <p className="text-slate-300">ความคมชัด: {aiScore.clarity}</p>
-                  <p className="text-emerald-300">สถานะ: ภาพมีความชัดเจน เหมาะสำหรับแนบในรายงาน</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-dashed border-slate-600 bg-slate-900/40 p-4">
-          <label htmlFor="ri-document-select" className="mb-2 block text-xs font-semibold text-slate-200">{lang === 'th' ? 'เลือกเอกสาร RI จากศูนย์เอกสารโครงการ' : 'Select RI Document from Project Document Hub'}</label>
-          <select id="ri-document-select" value={selectedRiId} onChange={event => setSelectedRiId(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="">{lang === 'th' ? 'ไม่แนบเอกสาร RI' : 'No RI document attached'}</option>{[...riDocuments].sort((a, b) => Number(String(b.building) === selectedRoomInfo?.building && String(b.floor) === String(selectedRoomInfo?.floor) && String(b.roomNumber) === String(selectedRoomInfo?.roomNumber)) - Number(String(a.building) === selectedRoomInfo?.building && String(a.floor) === String(selectedRoomInfo?.floor) && String(a.roomNumber) === String(selectedRoomInfo?.roomNumber))).map(doc => <option key={doc.id} value={doc.id}>{`${doc.reference || doc.doc_no || 'RI'} · ${doc.file_name || doc.name} · ${doc.building} / ${lang === 'th' ? 'ชั้น' : 'Floor'} ${doc.floor} / ${lang === 'th' ? 'ห้อง' : 'Room'} ${doc.roomNumber || doc.room} · ${doc.scheduledDate || '—'}`}</option>)}</select>
-          {selectedRiDocument && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800 p-3 text-xs"><span className="min-w-0 break-all text-slate-300">{selectedRiDocument.file_name || selectedRiDocument.name} · {selectedRiDocument.scheduledDate || '—'}</span><button type="button" onClick={previewRiDocument} className="rounded-md bg-sky-700 px-3 py-2 font-semibold text-white">{lang === 'th' ? 'ดูเอกสาร RI' : 'View RI Document'}</button></div>}
-        </div>
-
-        {/* Voice Note & Remarks */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-medium text-slate-300">{labels.remarks}</label>
-            <button
-              type="button"
-              onClick={handleVoiceRecord}
-              disabled={isSubmitting || isRecording}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold ${
-                isRecording ? 'bg-red-600 animate-pulse text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-              }`}
-            >
-              <Mic className="w-3.5 h-3.5" />
-              <span>{isRecording ? labels.recording : `${labels.voice} (AI Speech-to-Text)`}</span>
-            </button>
-          </div>
-          <textarea
-            rows={4}
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
-          placeholder={lang === 'th' ? "กรอกรายละเอียด หรือใช้ปุ่มบันทึกเสียงด้านบน..." : "Enter remarks or use the voice recording button above..."}
-            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-          ></textarea>
-        </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg text-sm"
-        >
-          {isSubmitting ? i18n[lang].storage.saving : labels.submit}
-        </button>
-      </form>
-      {riPreviewUrl && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-3" onClick={() => setRiPreviewUrl('')}><div className="w-full max-w-4xl overflow-hidden rounded-xl border border-slate-600 bg-slate-900" onClick={event => event.stopPropagation()}><div className="flex items-center justify-between p-3 text-sm font-semibold text-white"><span>{selectedRiDocument?.name}</span><button type="button" onClick={() => setRiPreviewUrl('')}><X className="h-4 w-4" /></button></div><iframe title={selectedRiDocument?.name || 'RI Document'} src={riPreviewUrl} className="h-[75vh] w-full bg-white" /></div></div>}
-    </div>
-  );
-}
-
-// ==========================================
-// MODULE 4: 13-TASK INSPECTION RECORDS
-// ==========================================
-function InspectionRecordsView({ t, lang, rooms, records, onInspectRoom }) {
-  const labels = t.records;
-  const [dateMode, setDateMode] = useState('all');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedBuilding, setSelectedBuilding] = useState('all');
-  const [selectedFloor, setSelectedFloor] = useState('all');
-  const [selectedRoom, setSelectedRoom] = useState('all');
-  const [reportDate, setReportDate] = useState(getLocalDateString());
-  const [reportWeek, setReportWeek] = useState(() => { const d = new Date(); const first = new Date(d.getFullYear(), 0, 1); return `${d.getFullYear()}-W${String(Math.ceil((((d - first) / 86400000) + first.getDay() + 1) / 7)).padStart(2, '0')}`; });
-  const weekRange = (weekValue) => {
-    const [year, week] = weekValue.split('-W').map(Number);
-    const jan4 = new Date(year, 0, 4);
-    const monday = new Date(jan4); monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (week - 1) * 7);
-    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-    return [getLocalDateString(monday), getLocalDateString(sunday)];
-  };
-  const recordDate = record => { const d = new Date(record.date || ''); return Number.isNaN(d.getTime()) ? String(record.date || '').slice(0, 10) : getLocalDateString(d); };
-  const visibleRecords = records.filter(record => {
-    const day = recordDate(record);
-    if (dateMode === 'daily') return day === reportDate;
-    if (dateMode === 'weekly') { const [start, end] = weekRange(reportWeek); return day >= start && day <= end; }
-    return true;
-  });
-  const selectedRecords = visibleRecords.filter(record => (selectedCategory === 'all' || record.task === selectedCategory) && (selectedBuilding === 'all' || canonicalBuilding(record.building, record.floor) === selectedBuilding) && (selectedFloor === 'all' || String(record.floor) === selectedFloor) && (selectedRoom === 'all' || `${canonicalBuilding(record.building, record.floor)}|${record.floor}|${record.roomNumber}` === selectedRoom));
-  const photoCount = selectedRecords.filter(record => record.photo || record.file_url).length;
-  const displayBuilding = value => canonicalBuilding(value) === BUILDING_B ? t.documents.buildingB : t.documents.buildingA;
-  const categories = [...new Set([...TASKS_13, ...records.map(record => record.task).filter(Boolean)])];
-  const byLocation = entries => {
-    const buildings = new Map();
-    entries.forEach(entry => {
-      const building = canonicalBuilding(entry.building, entry.floor);
-      if (!buildings.has(building)) buildings.set(building, new Map());
-      const floors = buildings.get(building);
-      const floor = String(entry.floor ?? rooms.find(room => String(room.roomNumber) === String(entry.roomNumber))?.floor ?? '—');
-      if (!floors.has(floor)) floors.set(floor, new Map());
-      const floorRooms = floors.get(floor);
-      const roomNumber = String(entry.roomNumber || '—');
-      if (!floorRooms.has(roomNumber)) floorRooms.set(roomNumber, []);
-      floorRooms.get(roomNumber).push(entry);
-    });
-    return buildings;
-  };
-
-  return <div className="space-y-4 sm:space-y-6">
-    <header className="rounded-xl border border-slate-700 bg-slate-800/80 p-4"><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p><div className="mt-3 flex flex-wrap items-center gap-2"><select value={selectedCategory} onChange={event => setSelectedCategory(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกหมวดงาน' : 'All Work Categories'}</option>{TASKS_13.map(task => <option key={task} value={task}>{taskLabel(task, lang)}</option>)}</select><select value={selectedBuilding} onChange={event => { setSelectedBuilding(event.target.value); setSelectedRoom('all'); }} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกอาคาร' : 'All Buildings'}</option>{BUILDING_VALUES.map(building => <option key={building} value={building}>{building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA}</option>)}</select><select value={selectedFloor} onChange={event => { setSelectedFloor(event.target.value); setSelectedRoom('all'); }} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกชั้น' : 'All Floors'}</option>{FLOORS.map(floor => <option key={floor} value={String(floor)}>{lang === 'th' ? `ชั้น ${floor}` : `Floor ${floor}`}</option>)}</select><select value={selectedRoom} onChange={event => setSelectedRoom(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกห้อง' : 'All Rooms'}</option>{rooms.filter(room => (selectedBuilding === 'all' || canonicalBuilding(room.building, room.floor) === selectedBuilding) && (selectedFloor === 'all' || String(room.floor) === selectedFloor)).map(room => <option key={room.id} value={`${canonicalBuilding(room.building, room.floor)}|${room.floor}|${room.roomNumber}`}>{room.roomNumber} · {room.building}</option>)}</select><select value={dateMode} onChange={event => setDateMode(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100"><option value="all">{lang === 'th' ? 'ทุกวันที่' : 'All Dates'}</option><option value="daily">{lang === 'th' ? 'รายวัน' : 'Daily'}</option><option value="weekly">{lang === 'th' ? 'รายสัปดาห์' : 'Weekly'}</option></select>{dateMode === 'daily' && <input type="date" value={reportDate} onChange={event => setReportDate(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" />}{dateMode === 'weekly' && <input type="week" value={reportWeek} onChange={event => setReportWeek(event.target.value)} className="rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-100" />}<span className="rounded-full bg-emerald-500/10 px-3 py-2 text-[10px] font-semibold text-emerald-300">{lang === 'th' ? `${selectedRecords.length} รายการ · ${photoCount} รูป` : `${selectedRecords.length} records · ${photoCount} photos`}</span><button type="button" onClick={() => downloadFile(JSON.stringify(selectedRecords, null, 2), `inspection-report-${dateMode}-${dateMode === 'daily' ? reportDate : reportWeek}.json`, 'application/json')} className="rounded-md bg-slate-700 px-3 py-2 text-xs font-semibold text-slate-100">{lang === 'th' ? 'ส่งออกรายงาน' : 'Export Report'}</button></div></header>
-    <div className="space-y-3">
-      {categories.map((task, index) => {
-        const taskRecords = selectedRecords.filter(record => record.task === task).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-        const grouped = byLocation(taskRecords);
-        return <details key={task} open={index === 0 && records.length > 0} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
-          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-slate-700/30"><span className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-xs font-bold text-emerald-400">{index + 1}</span><b className="text-sm text-slate-100">{taskLabel(task, lang)}</b></span><span className="text-[10px] text-slate-400">{labels.recordCount.replace('{count}', taskRecords.length)}</span></summary>
-          <div className="space-y-3 border-t border-slate-700 p-3 sm:p-4">
-            {grouped.size === 0 ? <p className="rounded-lg bg-slate-900/60 p-4 text-xs text-slate-400">{labels.noRecords}</p> : [...grouped.entries()].map(([building, floors]) => <section key={building} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"><h3 className="mb-3 text-xs font-bold text-emerald-300">{labels.building}: {displayBuilding(building)}</h3>
-              <div className="space-y-3">{[...floors.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([floor, floorRooms]) => <div key={floor}><h4 className="mb-2 text-[11px] font-semibold text-slate-300">{labels.floor} {floor}</h4><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{[...floorRooms.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })).map(([roomNumber, roomRecords]) => {
-                const room = rooms.find(item => String(item.roomNumber) === roomNumber && String(item.floor) === String(roomRecords[0]?.floor || '') && canonicalBuilding(item.building, item.floor) === canonicalBuilding(roomRecords[0]?.building, roomRecords[0]?.floor)) || rooms.find(item => String(item.roomNumber) === roomNumber && canonicalBuilding(item.building, item.floor) === building);
-                return <article key={roomNumber} className="rounded-lg border border-slate-700 bg-slate-800/80 p-3"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-100">{labels.room} {roomNumber}</b>{room && <StatusBadge status={room.tasks?.[task] || 'pending'} t={t} />}</div><div className="space-y-2">{roomRecords.map((record, recordIndex) => <div key={record.id || `${roomNumber}-${recordIndex}`} className="rounded-md bg-slate-900/70 p-2 text-[10px] text-slate-300"><p>{labels.result}: <StatusBadge status={record.status} t={t} /></p><p className="mt-1">{labels.inspector}: {record.inspector || '—'}</p><p className="mt-1 text-slate-400">{labels.inspectionDate}: {record.date || '—'}</p>{record.photo && <LocalEvidenceButton record={record} kind="photo" label={labels.viewPhotos} lang={lang} />}{record.riDocument && <LocalEvidenceButton record={record} kind="ri" label={labels.viewRiDocument} lang={lang} />}{record.photo?.file_url && <DriveImageThumbnail key={`${record.id}:${record.photo.file_url}`} fileUrl={record.photo.file_url} fileName={record.photo.name} label={labels.fileLink} />}{record.file_url && <a href={record.file_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold text-sky-300 underline">{labels.fileLink}</a>}{record.folder_path && <p className="mt-1 break-all text-slate-500">{labels.folderPath}: {record.folder_path}</p>}</div>)}</div>{room && <button type="button" onClick={() => onInspectRoom(room)} className="mt-2 rounded-md bg-slate-700 px-2.5 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-600">{labels.openRoom}</button>}</article>;
-              })}</div></div>)}</div>
-            </section>)}
-          </div>
-        </details>;
-      })}
-    </div>
+function LoginScreen({ name, setName, password, setPassword, onSubmit, toast }) {
+  return <div className="grid min-h-screen bg-[#f3f6f3] lg:grid-cols-[1.1fr_.9fr]">
+    <section className="relative hidden overflow-hidden bg-[#0B1A12] p-12 text-white lg:flex lg:flex-col lg:justify-between"><div className="absolute -right-24 -top-20 h-96 w-96 rounded-full bg-lime-400/10 blur-3xl"/><div className="relative flex items-center gap-3"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-lime-400 text-emerald-950"><Building2/></span><div><b className="text-xl tracking-wide">T-REX</b><p className="text-xs text-emerald-100/60">TRACKING & REPORT EXPERT SYSTEM</p></div></div><div className="relative max-w-xl"><p className="mb-4 text-xs font-bold uppercase tracking-[.2em] text-lime-300">Construction quality, clearly tracked</p><h1 className="text-5xl font-semibold leading-tight">Every room.<br/>Every inspection.<br/><span className="text-lime-300">One clear record.</span></h1><p className="mt-6 max-w-md text-sm leading-6 text-emerald-50/65">ติดตามคำขอตรวจ งานตรวจ และเอกสารคุณภาพก่อสร้างจากทุกไซต์ในพื้นที่ทำงานเดียว</p></div><div className="relative flex items-center justify-between text-xs text-emerald-50/40"><span>© 2026 T-REX Platform</span><span>Inspection tracking for your team</span></div></section>
+    <section className="flex items-center justify-center p-5 sm:p-10"><form onSubmit={onSubmit} className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-6 shadow-xl shadow-emerald-950/5 sm:p-9"><div className="mb-8 lg:hidden"><span className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-lime-400 text-emerald-950"><Building2/></span><b className="text-lg">T-REX</b></div><p className="text-xs font-bold uppercase tracking-widest text-emerald-700">Welcome back</p><h2 className="mt-2 text-2xl font-bold text-slate-900">Sign in to your workspace</h2><p className="mt-2 text-sm text-slate-500">เข้าสู่ระบบเพื่อติดตามงานตรวจของโครงการ</p><Field label="Email / Username" className="mt-7"><input autoComplete="username" className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder="SE Test or VV Test"/></Field><Field label="Password" className="mt-4"><input type="password" autoComplete="current-password" className={inputClass} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter any password for prototype"/></Field><Button type="submit" className="mt-6 w-full">Sign in <ArrowRight size={16}/></Button><div className="mt-5 rounded-xl bg-emerald-50 p-3 text-[11px] leading-5 text-emerald-900"><b>Prototype accounts</b><br/>SE Test · full permissions &nbsp; | &nbsp; VV Test · view / download only</div>{toast && <p role="status" className="mt-4 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{toast}</p>}</form></section>
   </div>;
 }
 
-function isInspectionRecordComplete(record) {
-  const status = String(record.status || '').toLowerCase();
-  return ['passed', 'defect', 'inprogress', 'completed'].includes(status) || Boolean(record.date || record.inspection_date || record.updated_at || record.photo || record.file_url);
+function SitesScreen({ user, choice, setChoice, onNext, onLogout }) {
+  return <div className="min-h-screen bg-[#F7F8F7]"><header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-10"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-950 text-lime-300"><Building2/></span><div><b>T-REX</b><small className="ml-2 hidden text-slate-400 sm:inline">Select a project</small></div></div><button onClick={onLogout} className="text-xs font-semibold text-slate-500 hover:text-rose-600">Log out</button></header><main className="mx-auto max-w-5xl px-4 py-10 sm:px-8"><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-700">Workspace access</p><h1 className="mt-2 text-3xl font-bold text-slate-900">ไซต์ของคุณ <span className="text-lg font-medium text-slate-400">/ Your Sites</span></h1><p className="mt-2 text-sm text-slate-500">Choose a project to open its inspection workspace.</p><div className="mt-8 grid gap-4 sm:grid-cols-2">{PROJECTS.map((project, i) => <button key={project.id} onClick={() => setChoice(project.id)} className={`rounded-2xl border bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${choice === project.id ? 'border-lime-500 ring-2 ring-lime-100' : 'border-slate-200'}`}><div className="flex items-start justify-between"><span className={`grid h-11 w-11 place-items-center rounded-xl ${i === 0 ? 'bg-lime-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}><Building2 size={20}/></span>{choice === project.id && <span className="rounded-full bg-lime-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800">SELECTED</span>}</div><p className="mt-5 text-xs font-bold tracking-widest text-emerald-700">{project.id}</p><h2 className="mt-1 text-base font-bold text-slate-900">{project.name}</h2><p className="mt-2 text-xs text-slate-500">{project.location}</p><p className="mt-4 text-[11px] text-slate-400">{project.rooms} rooms · {project.floors} floors {project.featured && '· Featured'}</p></button>)}</div><div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-emerald-950 p-5 text-white"><div><b className="text-sm">Signed in as {user?.name}</b><p className="mt-1 text-xs text-emerald-100/60">{user?.role} · {user?.email}</p></div><Button onClick={onNext}>NEXT <ArrowRight size={16}/></Button></div></main></div>;
 }
 
-function inspectionPhotoSource(record) {
-  if (record.photo && (record.photo.file_url || record.photo.url || record.photo.name || record.photo.type)) {
-    return { url: record.photo.file_url || record.photo.url || '', name: record.photo.name || record.file_name || '', local: true };
-  }
-  const candidateUrl = record.photo_url || record.photoUrl || '';
-  const candidateName = record.photo_name || record.file_name || '';
-  if (candidateUrl) return { url: candidateUrl, name: candidateName, local: false };
-  const isInspectionUpload = String(record.doc_type || record.docType || '').toLowerCase() === 'inspection';
-  const isImage = inferEvidenceMimeType(candidateName).startsWith('image/');
-  if (isInspectionUpload && isImage && record.file_url) return { url: record.file_url, name: candidateName, local: false };
+function PageHeading({ eyebrow, title, subtitle, action }) { return <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.18em] text-emerald-700">{eyebrow}</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{title}</h1>{subtitle && <p className="mt-1 max-w-2xl text-sm text-slate-500">{subtitle}</p>}</div>{action}</div>; }
+function Card({ title, subtitle, action, children, className = '' }) { return <section className={`rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5 ${className}`}><div className="mb-4 flex flex-wrap items-start justify-between gap-3">{title && <div><h2 className="text-sm font-bold text-slate-900">{title}</h2>{subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}</div>}{action}</div>{children}</section>; }
+function StatCard({ label, value, hint, icon: Icon, color = 'green' }) { const colors = { green: 'bg-lime-50 text-emerald-700', sky: 'bg-sky-50 text-sky-700', rose: 'bg-rose-50 text-rose-700', amber: 'bg-amber-50 text-amber-700' }; return <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-xs font-medium text-slate-500">{label}</p><b className="mt-2 block text-2xl font-bold tracking-tight text-slate-900">{value}</b></div><span className={`grid h-9 w-9 place-items-center rounded-xl ${colors[color]}`}><Icon size={17}/></span></div><p className="mt-2 text-[10px] text-slate-400">{hint}</p></div>; }
+function ProgressBar({ value, color = 'bg-lime-500', height = 'h-2' }) { return <div className={`overflow-hidden rounded-full bg-slate-100 ${height}`}><div className={`${height} rounded-full ${color} transition-all`} style={{ width: `${Math.max(0, Math.min(value, 100))}%` }}/></div>; }
+
+function Overview({ project, floors, selectedFloor, setSelectedFloor, selectedRoom, setSelectedRoom, events, requests, roomStatus, eventsForRoom, stats }) {
+  const floorRows = floors.map(floor => { const rooms = Math.min(18, Math.max(8, Math.round(project.rooms / floors.length))); const completed = Math.min(rooms, Math.max(1, Math.round(rooms * (0.2 + floor * .06)))); return { floor, rooms, completed, percent: Math.round(completed / rooms * 100) }; });
+  const floorsToShow = floorRows.slice().reverse();
+  const selectedStatus = roomStatus(selectedRoom);
+  const roomEvents = eventsForRoom(selectedRoom);
+  const scheduledRooms = new Set(requests.flatMap(r => r.rooms));
+  const attention = events.filter(e => e.result === 'Fail').slice(0, 4);
+  const workProgress = WORK_TYPES.map((type, i) => ({ type, passed: Math.min(project.rooms, 44 + i * 7), percent: Math.min(95, 31 + i * 7) }));
+  const roomNumberForFloor = floor => Array.from({ length: 18 }, (_, i) => `${floor}${String(i + 1).padStart(2, '0')}`);
+  return <div className="space-y-6">
+    <PageHeading eyebrow={`${project.id} · ${project.location}`} title="Project Overview" subtitle={`${project.name} · Site inspection and quality progress`} action={<Badge color="green"><Activity size={12} className="mr-1"/> LIVE PROJECT</Badge>}/>
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Total Rooms" value={project.rooms} hint="Registered in project master data" icon={Building2}/><StatCard label="Passed Rooms" value={`${stats.passed}`} hint={`${Math.round(stats.passed / stats.total * 100)}% overall progress`} icon={CheckCircle2}/><StatCard label="Open Defects" value={stats.defects} hint="Requires follow-up before handover" icon={AlertTriangle} color="rose"/><StatCard label="Scheduled Rooms" value={stats.scheduled} hint="Included in active inspection requests" icon={Clock3} color="amber"/></section>
+    <div className="grid gap-4 xl:grid-cols-[.9fr_1.5fr]">
+      <Card title="Building Preview" subtitle="59 / 144 ห้องผ่านการตรวจ · Overall floor completion"><div className="flex h-[285px] flex-col-reverse justify-between gap-1.5">{floorRows.map(row => <button key={row.floor} onClick={() => { setSelectedFloor(row.floor); setSelectedRoom(roomNumberForFloor(row.floor)[0]); }} className={`flex items-center gap-3 rounded-lg px-2 py-1 text-left transition ${selectedFloor === row.floor ? 'bg-lime-50' : 'hover:bg-slate-50'}`}><span className="w-12 text-[10px] font-semibold text-slate-500">ชั้น {row.floor}</span><ProgressBar value={row.percent} height="h-2.5"/><span className="w-9 text-right text-[10px] font-bold text-emerald-700">{row.percent}%</span></button>)}</div></Card>
+      <Card title="Architecture Inspection Overview" subtitle="Passed rooms / total rooms by work type"><div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">{workProgress.map(item => <div key={item.type}><div className="mb-1.5 flex justify-between gap-3 text-xs"><span className="truncate font-medium text-slate-600">{item.type}</span><b className="shrink-0 text-slate-800">{item.passed}/{project.rooms}</b></div><ProgressBar value={item.percent}/></div>)}</div><div className="mt-5 rounded-xl bg-emerald-950 p-4 text-white"><div className="flex items-center justify-between"><span className="text-xs text-emerald-100/75">Rooms passed inspection</span><span className="text-xs font-bold text-lime-300">{Math.round(stats.passed / stats.total * 100)}%</span></div><div className="mt-2"><ProgressBar value={Math.round(stats.passed / stats.total * 100)} color="bg-lime-400"/></div></div></Card>
+    </div>
+    <section className="grid gap-4 xl:grid-cols-[.85fr_1.5fr_1fr]">
+      <Card title="สถานะรายชั้น" subtitle="Floor status · Select a floor"><div className="space-y-1.5">{floorsToShow.map(row => <button key={row.floor} onClick={() => { setSelectedFloor(row.floor); setSelectedRoom(roomNumberForFloor(row.floor)[0]); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${selectedFloor === row.floor ? 'bg-emerald-950 text-white' : 'hover:bg-slate-50'}`}><span className="w-12 text-xs font-semibold">ชั้น {row.floor}</span><span className="flex-1"><ProgressBar value={row.percent} color={selectedFloor === row.floor ? 'bg-lime-400' : 'bg-lime-500'}/></span><span className={`text-[10px] ${selectedFloor === row.floor ? 'text-emerald-100' : 'text-slate-400'}`}>{row.completed}/{row.rooms}</span></button>)}</div><div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4 text-[10px]"><Badge color="green">ผ่าน</Badge><Badge color="rose">Defect</Badge><Badge color="amber">รอตรวจ</Badge><Badge>ไม่เริ่ม</Badge></div></Card>
+      <Card title={`Floor Plan — ชั้น ${selectedFloor}`} subtitle="Tap a room to see its inspection details" action={<Badge>{selectedFloor}F · {project.rooms} ROOMS</Badge>}><div className="grid grid-cols-3 gap-2 sm:grid-cols-6">{roomNumberForFloor(selectedFloor).map(room => { const status = roomStatus(room); const style = status === 'Pass' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : status === 'Fail' ? 'border-rose-200 bg-rose-50 text-rose-800' : scheduledRooms.has(room) ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-slate-50 text-slate-500'; return <button key={room} onClick={() => setSelectedRoom(room)} className={`relative grid min-h-[58px] place-items-center rounded-xl border text-xs font-bold transition hover:-translate-y-0.5 ${style} ${selectedRoom === room ? 'ring-2 ring-lime-400 ring-offset-2' : ''}`}><span>{room}</span><i className={`absolute bottom-2 h-1.5 w-1.5 rounded-full ${STATUS[status]?.dot || 'bg-slate-300'}`}/></button>; })}</div></Card>
+      <Card title="แบบขยายห้องพัก" subtitle={`Room zoom · ${selectedRoom}`} action={<ResultBadge status={selectedStatus}/> }><div className="relative mx-auto aspect-[4/3] max-w-[300px] overflow-hidden rounded-2xl border-2 border-slate-300 bg-[#fbfaf6] p-3"><div className="absolute inset-[9%] border-2 border-slate-300"/><div className="absolute left-[13%] top-[13%] grid h-[32%] w-[35%] place-items-center rounded-xl border border-sky-200 bg-sky-50 text-[10px] font-semibold text-sky-700">เตียง</div><div className="absolute right-[13%] top-[13%] grid h-[24%] w-[27%] place-items-center rounded-xl border border-slate-200 bg-white text-[10px] text-slate-500">ตู้เสื้อผ้า</div><div className="absolute bottom-[13%] left-[13%] grid h-[25%] w-[29%] place-items-center rounded-xl border border-cyan-200 bg-cyan-50 text-[10px] font-semibold text-cyan-700">ห้องน้ำ</div><div className="absolute bottom-[13%] right-[13%] grid h-[25%] w-[27%] place-items-center rounded-xl border border-amber-200 bg-amber-50 text-[10px] font-semibold text-amber-700">ระเบียง</div>{selectedStatus === 'Fail' && <span className="absolute left-[48%] top-[48%] grid h-7 w-7 place-items-center rounded-full bg-rose-500 text-xs font-bold text-white ring-4 ring-rose-100">!</span>}<span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-500">ROOM {selectedRoom}</span></div><div className="mt-3 space-y-2">{roomEvents.length ? roomEvents.slice(0, 2).map(e => <div key={e.id} className="rounded-xl bg-slate-50 p-3"><div className="flex justify-between gap-2"><span className="text-[11px] font-semibold">{e.stage}</span><ResultBadge status={e.result}/></div><p className="mt-1 text-[10px] text-slate-500">{e.defect || 'ตรวจผ่านตามรายการ'}</p></div>) : <p className="text-xs text-slate-400">No inspection event recorded for this room.</p>}</div></Card>
+    </section>
+    <section className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]"><Card title="ความคืบหน้าตามประเภทงาน" subtitle="Progress by work type"><div className="grid gap-3 sm:grid-cols-2">{workProgress.slice(0, 6).map(item => <div key={item.type} className="rounded-xl border border-slate-100 p-3"><div className="mb-2 flex justify-between text-xs"><span className="font-semibold">{item.type}</span><b>{item.percent}%</b></div><ProgressBar value={item.percent}/><p className="mt-2 text-[10px] text-slate-400">{item.passed} of {project.rooms} rooms checked</p></div>)}</div></Card><Card title="รายการที่ต้องติดตาม" subtitle="Upcoming & attention required"><div className="space-y-2">{attention.length ? attention.map(event => <div key={event.id} className="flex items-start gap-3 rounded-xl bg-rose-50/70 p-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-rose-100 text-[10px] font-bold text-rose-700">{event.room}</span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">Room {event.room} · {event.stage}</p><p className="mt-1 truncate text-[10px] text-rose-700">{event.defect || 'Follow-up required'}</p></div><MapPin size={14} className="mt-1 text-rose-500"/></div>) : <Empty text="No open defects. Great work."/>}<div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900"><b>Next appointment</b><p className="mt-1 text-[11px]">{requests.find(r => r.status !== 'Completed')?.requestNo || 'No upcoming request'} · {requests.find(r => r.status !== 'Completed')?.appointment || ''}</p></div></div></Card></section>
+  </div>;
+}
+
+function RequestSchedule({ project, requests, filter, setFilter, search, setSearch, month, setMonth, todayValue, canEdit, onCreate, onOpen, onReschedule }) {
+  const filtered = requests.filter(r => (filter === 'All Status' || r.status === filter) && `${r.requestNo} ${r.rooms.join(' ')} ${r.title}`.toLowerCase().includes(search.toLowerCase()));
+  const monthLabel = month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const { offset, days } = calendarBounds(month.getFullYear(), month.getMonth());
+  const [todayYear, todayMonth, todayDay] = todayValue.split('-').map(Number);
+  const calendarCells = [...Array(offset).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const prev = () => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)); const next = () => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1));
+  const requestsOnDay = n => requests.filter(r => r.appointment === `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}-${String(n).padStart(2, '0')}`);
+  return <div className="space-y-6"><PageHeading eyebrow={`${project.id} · Inspection planning`} title="Request & Schedule" subtitle="Create inspection requests, coordinate rooms and review upcoming appointments" action={<Button onClick={onCreate} disabled={!canEdit}><Plus size={16}/>Create Inspection Request</Button>}/>{!canEdit && <ReadOnlyNotice/>}
+    <div className="grid items-start gap-4 2xl:grid-cols-[1.3fr_.9fr]"><Card title="Inspection Request List" subtitle={`${filtered.length} requests`} action={<div className="flex flex-wrap gap-2"><div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาเลขห้อง / เลขที่เอกสารคำขอ" className={`${inputClass} pl-9 sm:w-64`}/></div><select value={filter} onChange={e => setFilter(e.target.value)} className={`${inputClass} sm:w-48`}><option>All Status</option><option>Scheduled</option><option>Partially Inspected</option><option>Completed</option></select></div>}><div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">{['REQUEST NO.','WORK STAGE','ROOMS','APPOINTMENT','STATUS','ACTIONS'].map(x => <th key={x} className="px-3 py-3 font-semibold">{x}</th>)}</tr></thead><tbody>{filtered.map(r => <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/70"><td className="px-3 py-3"><b className="block text-emerald-900">{r.requestNo}</b><small className="text-slate-400">{r.title}</small></td><td className="px-3 py-3">{r.stage}</td><td className="px-3 py-3">{r.rooms.length} rooms</td><td className="px-3 py-3">{r.appointment}<small className="ml-2 text-slate-400">{r.time}</small></td><td className="px-3 py-3"><ResultBadge status={r.status}/></td><td className="px-3 py-3"><div className="flex gap-1"><Button variant="ghost" className="min-h-8 px-2 text-xs" onClick={() => onOpen(r)}><Eye size={14}/>Open</Button><Button variant="ghost" className="min-h-8 px-2 text-xs" disabled={!canEdit} onClick={() => onReschedule(r)}><CalendarDays size={14}/>Reschedule</Button></div></td></tr>)}</tbody></table>{!filtered.length && <Empty text="No requests match these filters."/>}</div></Card>
+    <Card title="Monthly Schedule Calendar" subtitle={monthLabel}><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={prev} className="rounded-lg p-2 hover:bg-slate-100" aria-label="Previous month"><ChevronLeft size={17}/></button><b className="text-sm">{monthLabel}</b><button onClick={next} className="rounded-lg p-2 hover:bg-slate-100" aria-label="Next month"><ChevronRight size={17}/></button></div><Badge color="green">Today · {todayDay}</Badge></div><div className="grid grid-cols-7 border-l border-t border-slate-100 text-center text-[10px] text-slate-400">{['MON','TUE','WED','THU','FRI','SAT','SUN'].map(d => <span key={d} className="border-b border-r border-slate-100 bg-slate-50 py-2 font-bold">{d}</span>)}{calendarCells.map((day, i) => { const isToday = day === todayDay && month.getFullYear() === todayYear && month.getMonth() + 1 === todayMonth; return <div key={`${day}-${i}`} className={`min-h-[72px] border-b border-r border-slate-100 p-1 text-left ${isToday ? 'bg-lime-50/60' : ''}`}><span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] ${isToday ? 'bg-lime-400 font-bold text-emerald-950' : 'text-slate-500'}`}>{day || ''}</span>{day && requestsOnDay(day).slice(0, 2).map(r => <button key={r.id} onClick={() => onOpen(r)} className="mt-1 block w-full truncate rounded bg-emerald-50 px-1 py-1 text-left text-[9px] font-semibold text-emerald-800 hover:bg-lime-100">{r.time} · {r.rooms[0]}</button>)}</div>; })}</div></Card></div>
+  </div>;
+}
+
+function ReadOnlyNotice() { return <div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900"><ShieldCheck size={17} className="mt-0.5 shrink-0"/><p><b>Read-only access.</b> VV / Viewer can view and download project records. Create, upload, edit and delete actions are disabled.</p></div>; }
+
+function InspectionsPage({ project, requests, events, view, setView, canEdit, drafts, onInspect, onResumeDraft, onView, onDeleteDraft }) {
+  const activeRequests = requests.filter(r => r.status !== 'Completed');
+  const historyRequests = requests.filter(r => r.status === 'Completed' || events.some(e => e.requestId === r.id));
+  const rows = view === 'My Inspection' ? activeRequests : historyRequests;
+  return <div className="space-y-6"><PageHeading eyebrow={`${project.id} · Site quality`} title="Inspections" subtitle="Inspect assigned rooms, save drafts and review past inspection results" action={<select className={`${inputClass} w-auto`} value={view} onChange={e => setView(e.target.value)}><option>My Inspection</option><option>History</option></select>}/>{!canEdit && <ReadOnlyNotice/>}{view === 'My Inspection' && drafts.length > 0 && <Card title="Saved Drafts" subtitle="Continue an inspection later"><div className="grid gap-2 sm:grid-cols-2">{drafts.map(d => <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 p-3"><div><b className="text-xs">{d.requestNo} · Room {d.room}</b><p className="mt-1 text-[10px] text-slate-500">{d.stage} · {formatDateTime(d.savedAt)}</p></div><div className="flex gap-1"><Button variant="secondary" className="min-h-8 px-2 text-[10px]" disabled={!canEdit} onClick={() => onResumeDraft(d)}>Resume</Button>{canEdit && <button className="rounded-lg p-2 text-rose-500 hover:bg-rose-100" onClick={() => onDeleteDraft(d.id)} title="Delete draft"><Trash2 size={15}/></button>}</div></div>)}</div></Card>}
+    <Card title={view === 'My Inspection' ? 'My Inspection Queue' : 'Inspection History'} subtitle={view === 'My Inspection' ? 'Requests waiting for the site engineer' : 'Completed and previously inspected requests'}><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">{['REQUEST','SCHEDULE','ROOM(S)','WORK STAGE','PROGRESS','STATUS','ACTIONS'].map(x => <th key={x} className="px-3 py-3 font-semibold">{x}</th>)}</tr></thead><tbody>{rows.map(r => { const records = events.filter(e => e.requestId === r.id); const completed = new Set(records.map(e => String(e.room))).size; const result = records.some(e => e.result === 'Fail') ? 'Fail' : r.status === 'Completed' ? 'Pass' : 'Pending'; return <tr key={r.id} className="border-b border-slate-50 last:border-0"><td className="px-3 py-4"><b className="text-emerald-900">{r.requestNo}</b><p className="mt-1 text-[10px] text-slate-500">{r.title}</p></td><td className="px-3 py-4">{r.appointment}<span className="ml-2 text-slate-400">{r.time}</span></td><td className="px-3 py-4">{r.rooms.map(room => <span key={room} className="mr-1 inline-block rounded bg-slate-100 px-1.5 py-1 text-[10px]">{room}</span>)}</td><td className="px-3 py-4">{r.stage}</td><td className="px-3 py-4"><b>{completed}/{r.rooms.length}</b><div className="mt-1 w-20"><ProgressBar value={completed / r.rooms.length * 100}/></div></td><td className="px-3 py-4"><ResultBadge status={view === 'History' ? result : r.status}/></td><td className="px-3 py-4"><div className="flex flex-wrap gap-1">{view === 'History' && records.length > 0 && <Button variant="ghost" className="min-h-8 px-2 text-[10px]" onClick={() => onView(records[records.length - 1])}><Eye size={13}/>ดูผลตรวจ</Button>}<Button variant="primary" className="min-h-8 px-2 text-[10px]" disabled={!canEdit || (view === 'My Inspection' && r.status === 'Completed')} onClick={() => onInspect(r, records.at(-1))}>{view === 'History' ? 'Retry' : 'เปิดตรวจ'}</Button></div></td></tr>; })}</tbody></table>{rows.length === 0 && <Empty text={view === 'My Inspection' ? 'No active inspection requests.' : 'No inspection history yet.'}/>}</div></Card>
+  </div>;
+}
+
+function DocumentsPage({ project, events, requests, docs, packs, canEdit, search, setSearch, filters, setFilters, onUpload, onEdit, onDelete, onView, onPacks, summarySearch, setSummarySearch, onToast }) {
+  const [view, setView] = useState('Inspection Summary');
+  const [packForm, setPackForm] = useState({ contractor: '', period: '', workPackage: '', requestFilter: 'All', include: { events: true, photos: true, defects: true, ri: true, history: true } });
+  const [selectedPack, setSelectedPack] = useState(null);
+  const allRows = events.filter(e => `${e.requestNo} ${e.room} ${e.recorder} ${e.defect}`.toLowerCase().includes(summarySearch.toLowerCase()));
+  const filteredDocs = docs.filter(doc => (filters.building === 'All' || doc.building === filters.building) && (filters.floor === 'All' || String(doc.floor) === filters.floor) && (filters.room === 'All' || String(doc.room) === filters.room) && (filters.round === 'All' || doc.round === filters.round) && `${doc.name} ${doc.requestNo} ${doc.room} ${doc.type}`.toLowerCase().includes(search.toLowerCase()));
+  const summaryCards = [
+    { label: 'จำนวนบันทึก', value: events.length, icon: FileCheck2, color: 'green' },
+    { label: 'Pass Result', value: events.filter(e => e.result === 'Pass').length, icon: CheckCircle2, color: 'green' },
+    { label: 'รายการ / Defect', value: events.filter(e => e.result === 'Fail').length, icon: AlertTriangle, color: 'rose' },
+    { label: 'Evidence Files', value: events.reduce((n, e) => n + e.evidence.length, 0), icon: FileText, color: 'sky' },
+  ];
+  const exportCsv = () => { const headers = ['DATE','REQUEST','ROOM','RECORDER','RESULT','DEFECT','EVIDENCE']; const lines = [headers, ...allRows.map(e => [e.date, e.requestNo, e.room, e.recorder, e.result, e.defect, e.evidence.map(x => x.name).join('; ')])].map(row => row.map(csvEscape).join(',')).join('\r\n'); saveDownload(`trex-inspection-summary-${project.id}.csv`, `\uFEFF${lines}`, 'text/csv;charset=utf-8'); };
+  const generatePack = e => { e.preventDefault(); if (!packForm.contractor.trim() || !packForm.period.trim() || !packForm.workPackage.trim()) { onToast('Complete contractor, claim period and work package first.'); return; } const pack = { id: uid(), projectId: project.id, ...packForm, createdAt: new Date().toISOString(), eventIds: events.map(x => x.id), docIds: docs.map(x => x.id) }; onPacks([pack]); onToast('Claim evidence pack generated.'); };
+  const downloadPack = pack => { const content = JSON.stringify({ ...pack, events, documents: docs, requests }, null, 2); saveDownload(`${pack.id}-claim-evidence-pack.json`, content, 'application/json'); };
+  return <div className="space-y-6"><PageHeading eyebrow={`${project.id} · Project records`} title="Document" subtitle="Inspection history, claim evidence packs and project document repository" action={<select value={view} onChange={e => setView(e.target.value)} className={`${inputClass} w-auto`}><option>Inspection Summary</option><option>Claim Evidence Pack</option><option>Document Hub</option></select>}/>{!canEdit && <ReadOnlyNotice/>}
+    {view === 'Inspection Summary' && <><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{summaryCards.map(s => <StatCard key={s.label} label={s.label} value={s.value} hint="Current project records" icon={s.icon} color={s.color}/>)}</div><Card title="Inspection Activity Summary" subtitle="Exportable inspection records" action={<div className="flex flex-wrap gap-2"><div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input className={`${inputClass} pl-9 sm:w-52`} placeholder="Search Request / Room" value={summarySearch} onChange={e => setSummarySearch(e.target.value)}/></div><Button variant="secondary" onClick={exportCsv}><Download size={15}/>Export CSV</Button><Button variant="secondary" onClick={() => window.print()}><Printer size={15}/>Print / Save PDF</Button></div>}><SummaryTable events={allRows} onEvent={e => onToast(`${e.requestNo} · Room ${e.room} · ${e.result}`)}/></Card></>}
+    {view === 'Claim Evidence Pack' && <div className="grid items-start gap-4 xl:grid-cols-[1fr_.8fr]"><Card title="Generate Claim Evidence Pack" subtitle="Choose the evidence set to include"><form onSubmit={generatePack} className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><Field label="Contractor / ผู้รับเหมา"><input className={inputClass} value={packForm.contractor} onChange={e => setPackForm({ ...packForm, contractor: e.target.value })} placeholder="Contractor name"/></Field><Field label="Claim Period"><input className={inputClass} value={packForm.period} onChange={e => setPackForm({ ...packForm, period: e.target.value })} type="month"/></Field><Field label="Work Package"><select className={inputClass} value={packForm.workPackage} onChange={e => setPackForm({ ...packForm, workPackage: e.target.value })}><option value="">Choose work package</option>{WORK_TYPES.map(x => <option key={x}>{x}</option>)}</select></Field><Field label="Request Filter"><select className={inputClass} value={packForm.requestFilter} onChange={e => setPackForm({ ...packForm, requestFilter: e.target.value })}><option>All</option>{requests.map(r => <option key={r.id} value={r.requestNo}>{r.requestNo}</option>)}</select></Field></div><div className="grid gap-2 sm:grid-cols-2">{[['events','Inspection Events'],['photos','Site Photos'],['defects','Defect Status'],['ri','Inspection Request / RI'],['history','Room History']].map(([key,label]) => <label key={key} className="flex items-center gap-2 rounded-xl border border-slate-100 p-3 text-xs"><input type="checkbox" checked={packForm.include[key]} onChange={e => setPackForm({ ...packForm, include: { ...packForm.include, [key]: e.target.checked } })} className="accent-lime-500"/>{label}</label>)}</div><Button type="submit" disabled={!canEdit}><FilePlus2 size={15}/>Generate Claim Evidence Pack</Button></form></Card><Card title="Generated Packs" subtitle={`${packs.length} packs in this project`}><div className="space-y-2">{packs.map(pack => <div key={pack.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 p-3"><div><b className="text-xs">{pack.contractor}</b><p className="mt-1 text-[10px] text-slate-500">{pack.workPackage} · {pack.period} · {pack.id.slice(0,8)}</p></div><div className="flex gap-1"><Button variant="secondary" className="min-h-8 px-2 text-[10px]" onClick={() => setSelectedPack(pack)}><Eye size={13}/>Preview</Button><Button variant="secondary" className="min-h-8 px-2 text-[10px]" onClick={() => downloadPack(pack)}><Download size={13}/>Download</Button></div></div>)}{!packs.length && <Empty text="Generated evidence packs will appear here."/>}</div></Card></div>}
+    {view === 'Document Hub' && <><Card title="Document Hub" subtitle="Search project files by building, floor, room and inspection round" action={<div className="flex flex-wrap gap-2"><div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input className={`${inputClass} pl-9 sm:w-64`} placeholder="Search documents or requests" value={search} onChange={e => setSearch(e.target.value)}/></div>{canEdit && <Button onClick={onUpload}><Upload size={15}/>Upload Document</Button>}</div>}>
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800"><Building2 size={14}/>{project.id}</div><select className={inputClass} value={filters.building} onChange={e => setFilters({ ...filters, building: e.target.value, floor: 'All', room: 'All' })}><option>All</option><option>Building A</option><option>Building B</option></select><select className={inputClass} value={filters.floor} onChange={e => setFilters({ ...filters, floor: e.target.value })}><option>All</option>{Array.from({ length: project.floors }, (_, i) => String(i + 1)).map(x => <option key={x} value={x}>ชั้น {x}</option>)}</select><select className={inputClass} value={filters.room} onChange={e => setFilters({ ...filters, room: e.target.value })}><option>All</option>{[...new Set(docs.map(x => String(x.room)))].sort().map(x => <option key={x}>{x}</option>)}</select><select className={inputClass} value={filters.round} onChange={e => setFilters({ ...filters, round: e.target.value })}><option>All</option>{[...new Set(docs.map(x => x.round))].map(x => <option key={x}>{x}</option>)}</select></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">{['DOCUMENT','TYPE','REQUEST','ROOM','DATE','รายละเอียด'].map(x => <th key={x} className="px-3 py-3 font-semibold">{x}</th>)}</tr></thead><tbody>{filteredDocs.map(doc => <tr key={doc.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/70"><td className="px-3 py-3"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><FileText size={15}/></span><span><b className="block">{doc.name}</b><small className="text-slate-400">{doc.size || 'File'} · {doc.building} · Floor {doc.floor}</small></span></div></td><td className="px-3 py-3"><Badge>{doc.type}</Badge></td><td className="px-3 py-3">{doc.requestNo}</td><td className="px-3 py-3">{doc.room}</td><td className="px-3 py-3">{doc.date}</td><td className="px-3 py-3"><div className="flex gap-1"><Button variant="ghost" className="min-h-8 px-2 text-[10px]" onClick={() => onView(doc)}><Eye size={13}/>View</Button>{canEdit && <><Button variant="ghost" className="min-h-8 px-2 text-[10px]" onClick={() => onEdit(doc)}><Pencil size={13}/></Button><Button variant="ghost" className="min-h-8 px-2 text-[10px] text-rose-600" onClick={() => onDelete(doc)}><Trash2 size={13}/></Button></>}</div></td></tr>)}</tbody></table>{!filteredDocs.length && <Empty text="No documents match the selected filters."/>}</div>
+      </Card></>}
+    {selectedPack && <Modal title="Claim Evidence Pack Preview" onClose={() => setSelectedPack(null)}><div className="space-y-3"><div className="rounded-xl bg-emerald-50 p-4"><b className="text-sm">{selectedPack.contractor}</b><p className="mt-1 text-xs text-slate-600">{selectedPack.workPackage} · {selectedPack.period}</p></div><p className="text-xs">Includes {Object.entries(selectedPack.include).filter(([,v]) => v).map(([k]) => k).join(', ')}</p><p className="text-xs text-slate-500">{selectedPack.eventIds.length} inspection records · {selectedPack.docIds.length} documents</p><Button onClick={() => downloadPack(selectedPack)}><Download size={14}/>Download Pack</Button></div></Modal>}
+  </div>;
+}
+
+function SummaryTable({ events, onEvent }) { return <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] uppercase text-slate-400">{['DATE','REQUEST','ROOM','RECORDER','RESULT','DEFECT','EVIDENCE'].map(x => <th key={x} className="px-3 py-3">{x}</th>)}</tr></thead><tbody>{events.map(event => <tr key={event.id} onClick={() => onEvent(event)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50"><td className="px-3 py-3">{event.date}</td><td className="px-3 py-3 font-semibold text-emerald-900">{event.requestNo}</td><td className="px-3 py-3">{event.room}</td><td className="px-3 py-3">{event.recorder}</td><td className="px-3 py-3"><ResultBadge status={event.result}/></td><td className="max-w-[180px] truncate px-3 py-3">{event.defect || '—'}</td><td className="px-3 py-3">{event.evidence.length}</td></tr>)}</tbody></table>{!events.length && <Empty text="No inspection records found."/>}</div>; }
+
+function fileToDataUrl(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); }); }
+async function compressImage(file) {
+  if (!file.type.startsWith('image/')) return await fileToDataUrl(file);
+  const source = await fileToDataUrl(file);
+  return new Promise(resolve => { const img = new Image(); img.onload = () => { const scale = Math.min(1, 1400 / Math.max(img.width, img.height)); const canvas = document.createElement('canvas'); canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale); canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL('image/jpeg', .78)); }; img.onerror = () => resolve(source); img.src = source; });
+}
+function downloadRecord(record, fallbackName = 'trex-record') {
+  if (record.dataUrl) { const a = document.createElement('a'); a.href = record.dataUrl; a.download = record.name || fallbackName; a.click(); return; }
+  if (record.evidence?.dataUrl) { const a = document.createElement('a'); a.href = record.evidence.dataUrl; a.download = record.evidence.name || fallbackName; a.click(); return; }
+  saveDownload(`${fallbackName}.txt`, JSON.stringify(record, null, 2));
+}
+
+function AppModal({ modal, project, floors, requests, events, user, updateData, onClose, onToast, onCamera, onStopCamera, onCapture, videoRef, cameraState }) {
+  if (modal.type === 'request') return <RequestModal project={project} request={modal.request} onClose={onClose} onToast={onToast} updateData={updateData}/>;
+  if (modal.type === 'request-detail') return <Modal title={`Inspection Request · ${modal.request.requestNo}`} onClose={onClose}><RequestDetail request={modal.request} onClose={onClose}/></Modal>;
+  if (modal.type === 'inspection') return <InspectionModal project={project} request={modal.request} event={modal.event} draft={modal.draft} user={user} events={events} updateData={updateData} onClose={onClose} onToast={onToast} onCamera={onCamera} onStopCamera={onStopCamera} onCapture={onCapture} videoRef={videoRef} cameraState={cameraState}/>;
+  if (modal.type === 'event-detail') return <Modal title="Inspection Result" onClose={onClose}><EventDetail event={modal.event} onClose={onClose}/></Modal>;
+  if (modal.type === 'document') return <DocumentModal project={project} doc={modal.doc} requests={requests} floors={floors} onClose={onClose} onToast={onToast} updateData={updateData}/>;
+  if (modal.type === 'delete-doc') return <Modal title="Delete Document" onClose={onClose} size="max-w-md"><p className="text-sm text-slate-600">Delete <b>{modal.doc.name}</b> from this prototype project?</p><div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Cancel</Button><Button variant="danger" onClick={() => { updateData(c => ({ ...c, docs: c.docs.filter(d => d.id !== modal.doc.id) })); onToast('Document deleted.'); onClose(); }}><Trash2 size={15}/>Delete</Button></div></Modal>;
+  if (modal.type === 'document-detail') return <DocumentDetail doc={modal.doc} onClose={onClose}/>;
   return null;
 }
 
-function inspectionMatchesDocument(doc, record) {
-  const references = [doc.id, doc.reference, doc.doc_no, doc.file_name, doc.name].filter(Boolean).map(String);
-  const linkedReferences = [record.id, record.evidence_id, record.doc_no, record.docNo, record.riDocument?.id, record.riDocument?.document_id, record.riDocument?.reference, record.riDocument?.doc_no].filter(Boolean).map(String);
-  if (linkedReferences.some(value => references.includes(value))) return true;
-  const building = canonicalBuilding(record.building, record.floor);
-  const sameLocation = building === canonicalBuilding(doc.building, doc.floor) && String(record.floor) === String(doc.floor) && String(record.roomNumber || record.room) === String(doc.roomNumber || doc.room);
-  if (!sameLocation) return false;
-  const task = canonicalTask(record.task || record.trade || '');
-  const taskCategory = TASKS_13.includes(task) ? 'Architecture' : task;
-  return doc.category === task || doc.category === taskCategory;
+function RequestModal({ project, request, onClose, onToast, updateData }) {
+  const [form, setForm] = useState(() => request ? { ...request, rooms: [...request.rooms] } : { requestNo: `RI-${project.id.slice(2)}-${String(Date.now()).slice(-3)}`, rootId: '', stage: WORK_TYPES[0], title: '', appointment: todayIso(), time: '09:00', coordinator: 'Phattarawadee Sroiphap', rooms: [], attachmentNames: [] });
+  const [error, setError] = useState('');
+  const set = (key, value) => setForm(f => ({ ...f, [key]: value }));
+  const toggleRoom = room => set('rooms', form.rooms.includes(room) ? form.rooms.filter(x => x !== room) : [...form.rooms, room]);
+  const submit = e => { e.preventDefault(); if (!form.requestNo.trim() || !form.title.trim() || !form.appointment || !form.rooms.length) { setError('Complete required fields and select at least one room.'); return; } const next = { ...form, id: request?.id || uid(), projectId: project.id, status: request?.status || 'Scheduled', createdAt: request?.createdAt || new Date().toISOString() }; updateData(c => ({ ...c, requests: request ? c.requests.map(r => r.id === request.id ? next : r) : [next, ...c.requests] })); onToast(request ? 'Inspection request updated.' : 'Inspection request created and added to Inspections.'); onClose(); };
+  const handleFiles = e => { const files = [...e.target.files || []]; set('attachmentNames', [...new Set([...form.attachmentNames, ...files.map(f => f.name)])]); };
+  return <Modal title={request ? 'Reschedule / Edit Inspection Request' : 'Create Inspection Request'} onClose={onClose} size="max-w-3xl"><form onSubmit={submit} className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><Field label="Request No. / Root ID"><input className={inputClass} value={form.requestNo} onChange={e => set('requestNo', e.target.value)}/></Field><Field label="Root ID"><input className={inputClass} value={form.rootId} onChange={e => set('rootId', e.target.value)} placeholder="ROOT-001"/></Field><Field label="Work Stage"><select className={inputClass} value={form.stage} onChange={e => set('stage', e.target.value)}>{WORK_TYPES.map(x => <option key={x}>{x}</option>)}</select></Field><Field label="หัวข้อการตรวจ"><input className={inputClass} value={form.title} onChange={e => set('title', e.target.value)} placeholder="Inspection subject"/></Field><Field label="วันนัดตรวจ"><input type="date" className={inputClass} value={form.appointment} onChange={e => set('appointment', e.target.value)}/></Field><Field label="เวลา"><input type="time" className={inputClass} value={form.time} onChange={e => set('time', e.target.value)}/></Field><Field label="ผู้ประสานงาน / SE"><input className={inputClass} value={form.coordinator} onChange={e => set('coordinator', e.target.value)}/></Field><Field label="Project"><input className={`${inputClass} bg-slate-50`} readOnly value={`${project.id} · ${project.name}`}/></Field></div><div><div className="mb-2 flex items-center justify-between"><b className="text-xs">Select Rooms <span className="text-slate-400">({form.rooms.length} selected)</span></b><button type="button" onClick={() => set('rooms', form.rooms.length === ROOM_IDS.length ? [] : ROOM_IDS)} className="text-[10px] font-semibold text-emerald-700">{form.rooms.length === ROOM_IDS.length ? 'Clear all' : 'Select floor sample'}</button></div><div className="grid max-h-36 grid-cols-4 gap-2 overflow-y-auto rounded-xl border border-slate-100 p-3 sm:grid-cols-6">{ROOM_IDS.map(room => <label key={room} className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-2 text-[10px] ${form.rooms.includes(room) ? 'border-lime-400 bg-lime-50 text-emerald-900' : 'border-slate-100'}`}><input type="checkbox" checked={form.rooms.includes(room)} onChange={() => toggleRoom(room)} className="accent-lime-500"/>{room}</label>)}</div></div><Field label="Reference File Attachment"><input type="file" multiple onChange={handleFiles} className="block w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs"/>{form.attachmentNames.length > 0 && <p className="mt-1 text-[10px] text-slate-500">Attached: {form.attachmentNames.join(', ')}</p>}</Field>{error && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit"><Send size={14}/>{request ? 'Save Schedule' : 'Create Request'}</Button></div></form></Modal>;
 }
 
-function InspectionPhotoThumbnail({ record, labels, lang, t }) {
-  const [localUrl, setLocalUrl] = useState('');
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const photoSource = inspectionPhotoSource(record);
-  const remoteUrl = photoSource?.url || '';
-  const photoName = photoSource?.name || (lang === 'th' ? 'รูปตรวจงาน' : 'Inspection Photo');
-  useEffect(() => {
-    let active = true;
-    if (photoSource?.local && !remoteUrl) {
-      loadInspectionEvidence(record.evidence_id || record.id, 'photo').then(blob => {
-        if (active && blob) setLocalUrl(URL.createObjectURL(blob));
-      }).catch(error => console.warn('Could not load inspection photo evidence:', error));
-    }
-    return () => { active = false; };
-  }, [record.evidence_id, record.id, remoteUrl, photoSource?.local]);
-  useEffect(() => () => { if (localUrl) URL.revokeObjectURL(localUrl); }, [localUrl]);
-  const imageUrl = remoteUrl ? safeDriveImageUrl(remoteUrl) : localUrl;
-  if (failed) return <span className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400">{labels.noPhotoEvidence}</span>;
-  if (!imageUrl) return <span className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400">{labels.noPhotoEvidence}</span>;
-  return <><button type="button" onClick={() => setPreviewOpen(true)} title={labels.photoPreview} className="inline-flex h-16 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-600 bg-slate-900"><img src={imageUrl} alt={photoName} loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" /></button>{previewOpen && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-3 sm:p-6" onClick={() => setPreviewOpen(false)}><section role="dialog" aria-modal="true" aria-label={labels.photoPreview} className="w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl" onClick={event => event.stopPropagation()}><header className="flex items-center justify-between gap-3 border-b border-slate-700 p-3"><div className="min-w-0"><h3 className="text-sm font-bold text-slate-100">{labels.photoPreview}</h3><p className="truncate text-[10px] text-slate-400">{photoName}</p></div><button type="button" onClick={() => setPreviewOpen(false)} aria-label={t.common.close}><X className="h-4 w-4 text-slate-300" /></button></header><div className="grid max-h-[76vh] min-h-40 place-items-center overflow-auto bg-slate-950 p-3"><img src={imageUrl} alt={photoName} onError={() => setFailed(true)} className="max-h-[72vh] max-w-full object-contain" /></div><footer className="flex justify-end gap-2 border-t border-slate-700 p-3">{remoteUrl && <a href={remoteUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-200">{labels.openFile}</a>}<a href={imageUrl} download={photoName} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">{labels.downloadPhoto}</a><button type="button" onClick={() => setPreviewOpen(false)} className="rounded-lg bg-slate-700 px-3 py-2 text-xs text-slate-200">{t.common.close}</button></footer></section></div>}</>;
-}
+function RequestDetail({ request, onClose }) { return <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2">{[['Request No.',request.requestNo],['Root ID',request.rootId || '—'],['Work Stage',request.stage],['หัวข้อการตรวจ',request.title],['Appointment',`${request.appointment} · ${request.time}`],['Coordinator',request.coordinator],['Status',request.status],['Project ID',request.projectId]].map(([label,value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] text-slate-400">{label}</p><p className="mt-1 text-xs font-semibold">{value}</p></div>)}</div><div><b className="text-xs">Rooms</b><div className="mt-2 flex flex-wrap gap-2">{request.rooms.map(room => <Badge key={room} color="green">{room}</Badge>)}</div></div><div><b className="text-xs">Reference Files</b><p className="mt-1 text-xs text-slate-500">{request.attachmentNames?.join(', ') || 'No reference files attached'}</p></div><div className="flex justify-end"><Button variant="secondary" onClick={onClose}>Close</Button></div></div>; }
 
-function DocumentInspectionEvidence({ records, labels, t, lang }) {
-  const inspected = records.filter(isInspectionRecordComplete).sort((a, b) => String(b.date || b.updated_at || '').localeCompare(String(a.date || a.updated_at || '')));
-  const withPhotos = inspected.filter(record => inspectionPhotoSource(record));
-  if (!inspected.length) return <p className="mt-2 text-[10px] text-slate-500">{labels.notInspected}</p>;
-  return <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-300">✓ {labels.inspected}</span><span className="text-[10px] text-slate-400">{labels.inspectionStatus}: {inspected.map(record => t.status[record.status] || record.status || labels.inspected).join(', ')}</span></div>{withPhotos.length ? <><p className="mt-2 text-[10px] font-semibold text-slate-300">{labels.inspectionPhotoEvidence} · {withPhotos.map(record => effectiveDocumentDate({ date: record.date || record.inspection_date, updated_at: record.updated_at }) || '—').join(', ')}</p><div className="mt-2 flex flex-wrap gap-2">{withPhotos.map(record => <InspectionPhotoThumbnail key={`${record.id}-${record.photo?.name || record.file_name || ''}`} record={record} labels={labels} lang={lang} t={t} />)}</div></> : <p className="mt-2 text-[10px] text-slate-400">{labels.noPhotoEvidence}</p>}</div>;
-}
-
-// ==========================================
-// MODULE 5: DOCUMENT CENTER
-// ==========================================
-function DocumentCenterView({ t, lang, showToast, rooms, inspections = [], canEdit, userName, onRecordSaved }) {
-  const labels = t.documents;
-  const sampleDocs = () => [
-    { id: 'seed-1', name: 'Inspection_Report_Floor_4_Q3.pdf', reference: 'INS-2026-004', documentType: 'inspection', building: BUILDING_A, floor: '4', roomNumber: '401', category: 'Architecture', date: getLocalDateString(), status: 'completed', size: '3.4 MB' },
-    { id: 'seed-2', name: 'Defect_Summary_Boutique_Sukhumvit5.xlsx', reference: 'DEF-2026-002', documentType: 'defect', building: BUILDING_B, floor: '5', roomNumber: '502', category: 'MEP', date: getLocalDateString(), status: 'completed', size: '1.2 MB' },
-    { id: 'seed-3', name: 'RI_Architectural_Specs_V2.pdf', reference: 'RI-2026-003', documentType: 'ri', building: BUILDING_B, floor: '6', roomNumber: '603', category: 'Architecture', date: getLocalDateString(), scheduledDate: getLocalDateString(), status: 'pending', size: '4.9 MB' },
-    { id: 'seed-4', name: 'Handover_Certificate_Floor_1-2.pdf', reference: 'STR-2026-001', documentType: 'general', building: BUILDING_A, floor: '1', roomNumber: '101', category: 'Structure', date: getLocalDateString(), status: 'completed', size: '4.1 MB' }
-  ];
-  const [docs, setDocs] = useState(() => {
-    try { const stored = JSON.parse(localStorage.getItem('trex-documents')); return Array.isArray(stored) && stored.length ? expireDueRiDocuments(stored.map(doc => ({ ...doc, building: canonicalBuilding(doc.building, doc.floor) }))) : sampleDocs(); }
-    catch { return sampleDocs(); }
-  });
-  const [path, setPath] = useState({ building: null, floor: null, room: null, category: null });
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [reasonDoc, setReasonDoc] = useState(null);
-  const [reasonText, setReasonText] = useState('');
-  const [selectedDoc, setSelectedDoc] = useState(null);
-  const [previewImageFailed, setPreviewImageFailed] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [today, setToday] = useState(() => getLocalDateString());
-  const lastCheckedDate = useRef(today);
-  const [form, setForm] = useState({ documentType: 'general', building: BUILDING_A, floor: '1', roomNumber: '', category: 'Architecture', reference: '', scheduledDate: '', file: null });
-  const [savingUpload, setSavingUpload] = useState(false);
-  const [photoCollectionMode, setPhotoCollectionMode] = useState(null);
-  const [docFilters, setDocFilters] = useState(() => {
-    const currentDate = getLocalDateString();
-    const defaults = { period: 'exact', date: currentDate, reportWeek: currentIsoWeekValue(), reportMonth: currentDate.slice(0, 7), type: 'all', status: 'all', search: '' };
-    try {
-      const saved = JSON.parse(localStorage.getItem('trex-document-hub-filters') || '{}') || {};
-      return { ...defaults, ...saved, period: saved.period === 'all' ? 'all' : 'exact', date: saved.date || currentDate };
-    }
-    catch { return defaults; }
-  });
-  const updateDocFilters = changes => setDocFilters(current => ({ ...current, ...changes }));
-
-  const docToHistoryRow = (doc, overrides = {}) => toHistoryLogRow({
-    id: doc.id, building: canonicalBuilding(doc.building, doc.floor),
-    floor: doc.floor, room: doc.roomNumber, trade: doc.category,
-    docNo: doc.reference, docType: doc.documentType, appointmentDate: doc.scheduledDate || '',
-    status: overrides.status || doc.status, reason: overrides.reason ?? doc.reasonReport ?? '',
-    fileName: doc.file_name || doc.name, fileUrl: doc.file_url || '', folderPath: doc.folder_path || '',
-    updatedAt: new Date().toISOString(),
-  });
-
-  useEffect(() => {
-    let active = true;
-    docs.filter(doc => !doc.file && !String(doc.id).startsWith('seed-')).forEach(doc => {
-      loadInspectionEvidence(doc.id, 'photo').then(file => {
-        if (active && file) setDocs(current => current.map(item => item.id === doc.id ? { ...item, file } : item));
-      }).catch(error => console.warn('Could not restore a locally saved document file:', error));
+function InspectionModal({ project, request, event, draft, user, events, updateData, onClose, onToast, onCamera, onStopCamera, onCapture, videoRef, cameraState }) {
+  const initial = draft || event || {};
+  const [room, setRoom] = useState(String(initial.room || request.rooms.find(r => !events.some(x => x.requestId === request.id && String(x.room) === String(r))) || request.rooms[0] || ''));
+  const [recorder, setRecorder] = useState(initial.recorder || user?.name || '');
+  const [checklist, setChecklist] = useState(() => Object.fromEntries(CHECKLIST.map(item => [item, initial.checklist?.[item] || 'ยังไม่ระบุ'])));
+  const [defect, setDefect] = useState(initial.defect || ''); const [location, setLocation] = useState(initial.location || '');
+  const [defects, setDefects] = useState(initial.defects || []); const [defectInput, setDefectInput] = useState('');
+  const [note, setNote] = useState(initial.note || ''); const [cmConfirm, setCmConfirm] = useState(initial.cmConfirmed || false); const [cmWitness, setCmWitness] = useState(initial.cmWitness || false);
+  const [reviseDoc, setReviseDoc] = useState(initial.reviseDoc || ''); const [evidence, setEvidence] = useState(initial.evidence || []); const [planOpen, setPlanOpen] = useState(false); const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(''); const [cameraOpen, setCameraOpen] = useState(false);
+  useEffect(() => { const handler = e => setEvidence(list => [...list, e.detail]); window.addEventListener('trex-add-photo', handler); return () => window.removeEventListener('trex-add-photo', handler); }, []);
+  const addEvidenceFiles = async files => { const next = []; for (const file of files) { if (file.size > 5 * 1024 * 1024) { setError(`${file.name} exceeds the 5 MB prototype limit.`); continue; } try { next.push({ id: uid(), name: file.name, type: file.type, dataUrl: await compressImage(file) }); } catch { setError(`Could not read ${file.name}.`); } } setEvidence(current => [...current, ...next]); };
+  const addDefect = () => { if (!defectInput.trim()) return; setDefects(list => [...list, defectInput.trim()]); setDefectInput(''); };
+  const save = async isDraft => {
+    if (!room || !recorder.trim()) { setError('Select a room and enter the recorder name.'); return; }
+    if (!isDraft && !Object.values(checklist).some(value => value !== 'ยังไม่ระบุ') && !defect.trim()) { setError('Complete at least one checklist item before saving.'); return; }
+    setSaving(true);
+    const result = Object.values(checklist).includes('Fail') || defect.trim() || defects.length ? 'Fail' : Object.values(checklist).every(value => value === 'Pass') ? 'Pass' : 'Pending';
+    const record = { id: isDraft ? (draft?.id || uid()) : uid(), projectId: project.id, requestId: request.id, requestNo: request.requestNo, room, stage: request.stage, date: todayIso(), recorder: recorder.trim(), result, checklist, defect: [defect.trim(), ...defects].filter(Boolean).join(' · '), defects, location, note, evidence, cmConfirmed: cmConfirm, cmWitness, reviseDoc, savedAt: new Date().toISOString() };
+    if (isDraft) { updateData(c => ({ ...c, drafts: [record, ...c.drafts.filter(d => d.id !== record.id)] })); onToast('Inspection draft saved.'); setSaving(false); onClose(); return; }
+    updateData(c => {
+      const nextEvents = event && !draft ? [...c.events, record] : [...c.events, record];
+      const requestEvents = nextEvents.filter(x => x.requestId === request.id);
+      const doneRooms = new Set(requestEvents.map(x => String(x.room))).size;
+      const nextStatus = doneRooms >= request.rooms.length ? 'Completed' : 'Partially Inspected';
+      const nextRequests = c.requests.map(r => r.id === request.id ? { ...r, status: nextStatus } : r);
+      return { ...c, events: nextEvents, requests: nextRequests, drafts: c.drafts.filter(d => !(d.requestId === request.id && String(d.room) === String(room))) };
     });
-    return () => { active = false; };
-  }, [docs]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const nextDate = getLocalDateString();
-      if (lastCheckedDate.current !== nextDate) {
-        lastCheckedDate.current = nextDate;
-        setToday(nextDate);
-        const nextDocs = expireDueRiDocuments(docs, nextDate);
-        const newlyExpired = nextDocs.filter(doc => doc.status === 'expired' && docs.some(previous => previous.id === doc.id && previous.status !== 'expired'));
-        setDocs(nextDocs);
-        if (canEdit) newlyExpired.forEach(doc => { void onRecordSaved(docToHistoryRow(doc, { status: 'expired' })); });
-      }
-    }, 60000);
-    return () => window.clearInterval(timer);
-  }, [docs, today, canEdit, onRecordSaved]);
-  useEffect(() => {
-    try { localStorage.setItem('trex-documents', JSON.stringify(docs.map(doc => { const metadata = { ...doc }; delete metadata.file; return metadata; }))); }
-    catch (error) { console.warn('Could not save document metadata:', error); }
-  }, [docs]);
-  useEffect(() => {
-    try { localStorage.setItem('trex-document-hub-filters', JSON.stringify(docFilters)); }
-    catch (error) { console.warn('Could not save document filter preferences:', error); }
-  }, [docFilters]);
-  useEffect(() => () => { if (selectedDoc?.previewUrl) URL.revokeObjectURL(selectedDoc.previewUrl); }, [selectedDoc]);
-
-  const buildingKeys = BUILDING_VALUES;
-  const floorsForBuilding = () => FLOORS.map(String);
-  const floors = floorsForBuilding(form.building);
-  const roomOptions = rooms.filter(room => canonicalBuilding(room.building, room.floor) === form.building && String(room.floor) === String(form.floor));
-  const displayBuilding = key => canonicalBuilding(key) === BUILDING_B ? labels.buildingB : labels.buildingA;
-  const displayCategory = key => key === 'Architecture' ? labels.architecture : key === 'MEP' ? labels.mep : labels.structure;
-  const displayType = key => ({ ri: labels.typeRI, inspection: labels.typeInspection, defect: labels.typeDefect, general: labels.typeGeneral })[key] || labels.typeGeneral;
-  const displayStatus = key => ({ pending: labels.statusPending, completed: labels.statusCompleted, expired: labels.statusExpired, archived: labels.statusArchived })[key] || labels.statusPending;
-  const lifecycle = doc => {
-    if (doc.documentType !== 'ri' || doc.status === 'completed' || doc.status === 'archived') return doc.status;
-    const elapsed = dayDifference(doc.scheduledDate || doc.date, today);
-    if (elapsed >= 2) return 'expired';
-    return 'pending';
+    onToast(`Inspection saved · ${result}`); setSaving(false); onClose();
   };
-  const reminders = docs.filter(doc => doc.documentType === 'ri' && lifecycle(doc) === 'pending' && dayDifference(doc.scheduledDate || doc.date, today) >= 0);
-
-  const dateInSelectedPeriod = doc => {
-    const docDate = effectiveDocumentDate(doc);
-    if (!docDate) return false;
-    return docFilters.period === 'all' || docDate === docFilters.date;
-  };
-  const normalizedSearch = docFilters.search.trim().toLocaleLowerCase();
-  const passesDocumentFilters = doc => {
-    const matchesType = docFilters.type === 'all' || doc.documentType === docFilters.type;
-    const matchesStatus = docFilters.status === 'all' || lifecycle(doc) === docFilters.status;
-    const searchable = `${doc.reference || ''} ${doc.name || ''} ${doc.file_name || ''} ${doc.building || ''} ${doc.floor || ''} ${doc.roomNumber || ''}`.toLocaleLowerCase();
-    return matchesType && matchesStatus && (!normalizedSearch || searchable.includes(normalizedSearch));
-  };
-  const matchingDocs = docs.filter(doc => passesDocumentFilters(doc) && dateInSelectedPeriod(doc));
-
-  const resetPathTo = level => setPath(previous => ({ building: previous.building, floor: level === 'floor' || level === 'room' || level === 'category' ? previous.floor : null, room: level === 'room' || level === 'category' ? previous.room : null, category: level === 'category' ? previous.category : null }));
-  const chooseBuilding = value => setPath({ building: value, floor: null, room: null, category: null });
-  const chooseFloor = value => setPath(current => ({ ...current, floor: value, room: null, category: null }));
-  const chooseRoom = value => setPath(current => ({ ...current, room: value, category: null }));
-  const chooseCategory = value => setPath(current => ({ ...current, category: value }));
-  const periodResultCount = matchingDocs.filter(doc => (!path.building || doc.building === path.building) && (!path.floor || String(doc.floor) === String(path.floor)) && (!path.room || String(doc.roomNumber) === String(path.room)) && (!path.category || doc.category === path.category)).length;
-  const docsAtPath = matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === path.category)
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.reference || '').localeCompare(String(b.reference || ''), undefined, { numeric: true }));
-  const inspectionsForDocument = doc => inspections.filter(record => inspectionMatchesDocument(doc, record));
-  const collectionRange = photoCollectionMode === 'weekly'
-    ? isoWeekRange(docFilters.reportWeek)
-    : photoCollectionMode === 'monthly'
-      ? [`${docFilters.reportMonth}-01`, getLocalDateString(new Date(Number(docFilters.reportMonth.slice(0, 4)), Number(docFilters.reportMonth.slice(5, 7)), 0))]
-      : ['', ''];
-  const reportCandidateDocs = docs.filter(doc => passesDocumentFilters(doc) && (!path.building || doc.building === path.building) && (!path.floor || String(doc.floor) === String(path.floor)) && (!path.room || String(doc.roomNumber) === String(path.room)) && (!path.category || doc.category === path.category));
-  const collectedPhotoRecords = photoCollectionMode ? inspections.filter(record => {
-    if (!inspectionPhotoSource(record) || !isInspectionRecordComplete(record)) return false;
-    const photoDate = effectiveDocumentDate({ date: record.date || record.inspection_date, updated_at: record.updated_at });
-    return photoDate >= collectionRange[0] && photoDate <= collectionRange[1] && reportCandidateDocs.some(doc => inspectionMatchesDocument(doc, record));
-  }).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))) : [];
-
-  const openUpload = () => {
-    const nextReference = `DOC-${today.slice(0, 4)}-${String(docs.length + 1).padStart(4, '0')}`;
-    const initialBuilding = BUILDING_A;
-    const initialFloor = floorsForBuilding(initialBuilding)[0] || '1';
-    const initialRoom = rooms.find(room => canonicalBuilding(room.building, room.floor) === initialBuilding && String(room.floor) === initialFloor)?.roomNumber || '';
-    setForm({ documentType: 'general', building: initialBuilding, floor: initialFloor, roomNumber: initialRoom, category: 'Architecture', reference: nextReference, scheduledDate: '', file: null });
-    setFormError('');
-    setUploadOpen(true);
-  };
-  const submitUpload = async event => {
-    event.preventDefault();
-    if (savingUpload) return;
-    if (!form.file || !form.floor || !form.roomNumber || !form.category || (form.documentType === 'ri' && (!form.scheduledDate || form.scheduledDate < today))) { setFormError(labels.required); return; }
-    if (form.file.size > MAX_UPLOAD_BYTES) { setFormError(t.storage.fileTooLarge); return; }
-    const documentRecord = { id: crypto.randomUUID(), name: form.file.name, reference: form.reference.trim() || `DOC-${today.replaceAll('-', '')}`, documentType: form.documentType, building: form.building, floor: String(form.floor), roomNumber: String(form.roomNumber), category: form.category, date: today, scheduledDate: form.documentType === 'ri' ? form.scheduledDate : null, status: 'pending', size: `${(form.file.size / 1024 / 1024).toFixed(2)} MB`, file: form.file };
-    setDocs(current => [documentRecord, ...current]);
-    setPath({ building: documentRecord.building, floor: documentRecord.floor, room: documentRecord.roomNumber, category: documentRecord.category });
-    setSavingUpload(true);
-    try {
-      const saved = await onRecordSaved(docToHistoryRow(documentRecord), form.file);
-      if (saved) setDocs(current => current.map(doc => doc.id === documentRecord.id ? { ...doc, file_url: saved.file_url || doc.file_url, folder_path: saved.folder_path || doc.folder_path, file_name: saved.file_name || doc.file_name } : doc));
-      showToast(lang === 'th' ? 'บันทึกเอกสารไว้ในอุปกรณ์นี้แล้ว' : 'Document saved on this device');
-      setUploadOpen(false);
-    } catch (error) {
-      console.error('Document upload failed:', error);
-      setFormError(t.storage.uploadFailed);
-    } finally {
-      setSavingUpload(false);
-    }
-  };
-  const handleDownload = doc => {
-    if (doc.file) { const url = URL.createObjectURL(doc.file); const anchor = document.createElement('a'); anchor.href = url; anchor.download = doc.name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
-    else if (doc.file_url) window.open(doc.file_url, '_blank', 'noopener,noreferrer');
-    else downloadFile(`${doc.name}\n${labels.referenceNumber}: ${doc.reference}\n${labels.category}: ${displayCategory(doc.category)}\n${labels.date}: ${doc.date}`, `${doc.name}.txt`);
-  };
-  const handlePreview = doc => { setPreviewImageFailed(false); setSelectedDoc({ ...doc, previewUrl: doc.file ? URL.createObjectURL(doc.file) : null }); };
-  const markComplete = doc => {
-    const updated = { ...doc, status: 'completed', completedAt: today };
-    setDocs(current => current.map(item => item.id === doc.id ? updated : item));
-    if (canEdit) void onRecordSaved(docToHistoryRow(updated, { status: 'completed' }));
-  };
-  const submitReason = event => {
-    event.preventDefault();
-    if (!reasonText.trim()) return;
-    const updated = { ...reasonDoc, status: 'archived', reasonReport: reasonText.trim(), archivedAt: today, archivedBy: userName };
-    setDocs(current => current.map(item => item.id === reasonDoc.id ? updated : item));
-    if (canEdit) void onRecordSaved(docToHistoryRow(updated, { status: 'archived', reason: reasonText.trim() }));
-    setReasonDoc(null); setReasonText('');
-  };
-
-  const floorsAtPath = path.building ? floorsForBuilding(path.building) : [];
-  const roomNumbersAtPath = path.building && path.floor ? [...new Set([
-    ...Array.from({ length: 27 }, (_, index) => `${path.floor}${String(index + 1).padStart(2, '0')}`),
-    ...docs.filter(doc => canonicalBuilding(doc.building, doc.floor) === path.building && String(doc.floor) === String(path.floor)).map(doc => String(doc.roomNumber)),
-  ])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) : [];
-  const drillItems = !path.building
-    ? buildingKeys.map(value => ({ value, label: displayBuilding(value), count: matchingDocs.filter(doc => doc.building === value).length }))
-    : !path.floor
-      ? floorsAtPath.map(value => ({ value, label: `${labels.floor} ${value}`, count: matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === value).length }))
-      : !path.room
-        ? roomNumbersAtPath.map(value => ({ value, label: `${labels.room} ${value}`, count: matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === value).length }))
-        : !path.category
-          ? ['Architecture', 'MEP', 'Structure'].map(value => ({ value, label: displayCategory(value), count: matchingDocs.filter(doc => doc.building === path.building && String(doc.floor) === String(path.floor) && String(doc.roomNumber) === String(path.room) && doc.category === value).length }))
-          : [];
-  const selectDrillItem = value => !path.building ? chooseBuilding(value) : !path.floor ? chooseFloor(value) : !path.room ? chooseRoom(value) : chooseCategory(value);
-
-  return <div className="space-y-4 sm:space-y-6">
-    {reminders.length > 0 && <aside role="status" className="rounded-xl border border-amber-400/50 bg-amber-950/50 p-4 text-amber-100 shadow-lg"><div className="flex items-start gap-3"><Bell className="mt-0.5 h-5 w-5 shrink-0 text-amber-300"/><div><h2 className="text-sm font-bold">{labels.morningWarning}</h2><ul className="mt-2 space-y-1 text-xs">{reminders.map(doc => { const elapsed = dayDifference(doc.scheduledDate || doc.date, today); return <li key={doc.id}>{doc.reference} · {doc.name} · {elapsed === 0 ? labels.dueToday : labels.reminderDay.replace('{day}', String(elapsed))}</li>; })}</ul></div></div></aside>}
-    <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/80 p-4"><div><h2 className="text-base font-bold text-slate-100">{labels.title}</h2><p className="mt-1 text-xs text-slate-400">{labels.subtitle}</p></div>{canEdit && <button type="button" onClick={openUpload} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"><Upload className="h-4 w-4"/>{labels.upload}</button>}</header>
-
-    <section aria-label={labels.timeFilter} className="rounded-xl border border-slate-700 bg-slate-800/70 p-3 sm:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-bold text-slate-100">{labels.timeFilter}</h3><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300">{labels.showingPeriod(periodResultCount, docFilters.period === 'all')}</span><button type="button" onClick={() => setPhotoCollectionMode('weekly')} className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-sky-200 hover:bg-sky-500/20">{labels.weeklyPhotos}</button><button type="button" onClick={() => setPhotoCollectionMode('monthly')} className="rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-violet-200 hover:bg-violet-500/20">{labels.monthlyPhotos}</button></div></div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="space-y-1"><span className="block text-[10px] font-semibold text-slate-300">{labels.timeFilter}</span><div className="flex rounded-lg border border-slate-600 bg-slate-900 p-1"><button type="button" aria-pressed={docFilters.period === 'exact'} onClick={() => updateDocFilters({ period: 'exact' })} className={`flex-1 rounded-md px-2 py-2 text-[10px] font-semibold ${docFilters.period === 'exact' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>{labels.exactDateOnly}</button><button type="button" aria-pressed={docFilters.period === 'all'} onClick={() => updateDocFilters({ period: 'all' })} className={`flex-1 rounded-md px-2 py-2 text-[10px] font-semibold ${docFilters.period === 'all' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>{labels.allDates}</button></div></div>
-        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.selectedDate}</span><input type="date" value={docFilters.date} onChange={event => updateDocFilters({ date: event.target.value, period: 'exact' })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100" /></label>
-        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.typeFilter}</span><select value={docFilters.type} onChange={event => updateDocFilters({ type: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="all">{labels.allTypes}</option><option value="general">{labels.typeGeneral}</option><option value="ri">{labels.typeRI}</option><option value="inspection">{labels.typeInspection}</option><option value="defect">{labels.typeDefect}</option></select></label>
-        <label className="space-y-1 text-[10px] font-semibold text-slate-300"><span>{labels.statusFilter}</span><select value={docFilters.status} onChange={event => updateDocFilters({ status: event.target.value })} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100"><option value="all">{labels.allStatuses}</option><option value="pending">{labels.statusPending}</option><option value="completed">{labels.statusCompleted}</option><option value="expired">{labels.statusExpired}</option><option value="archived">{labels.statusArchived}</option></select></label>
-        <label className="space-y-1 text-[10px] font-semibold text-slate-300 sm:col-span-2"><span>{labels.searchDocuments}</span><input type="search" value={docFilters.search} onChange={event => updateDocFilters({ search: event.target.value })} placeholder={labels.searchDocuments} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-xs text-slate-100 placeholder:text-slate-500" /></label>
-      </div>
-      {docFilters.period === 'all' && <div className="mt-3 flex justify-end"><button type="button" onClick={() => updateDocFilters({ period: 'exact' })} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-700">{labels.resetDateFilter}</button></div>}
-    </section>
-
-    <nav aria-label={lang === 'th' ? 'ลำดับตำแหน่งเอกสาร' : 'Document location hierarchy'} className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/70 p-3 text-xs">
-      {[['building', labels.building, path.building], ['floor', labels.floor, path.floor], ['room', labels.room, path.room], ['category', labels.category, path.category]].map(([level, label, value], index) => <React.Fragment key={level}>{index > 0 && <span className="px-1 text-slate-500">›</span>}<button type="button" disabled={!path[level]} onClick={() => resetPathTo(level)} className={`rounded-md px-2 py-1.5 ${path[level] ? 'text-emerald-300 hover:bg-slate-700' : 'text-slate-500'}`}>{value ? (level === 'building' ? displayBuilding(value) : level === 'category' ? displayCategory(value) : `${label} ${value}`) : label}</button></React.Fragment>)}
-    </nav>
-
-    {!path.category ? <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{drillItems.map(item => <button type="button" key={item.value} onClick={() => selectDrillItem(item.value)} className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-800/70 p-4 text-left hover:border-emerald-500/60 hover:bg-slate-800"><span className="flex min-w-0 items-center gap-3"><FolderKanban className="h-5 w-5 shrink-0 text-emerald-400"/><b className="truncate text-sm text-slate-100">{item.label}</b></span><span className="shrink-0 rounded-full bg-slate-900 px-2 py-1 text-[10px] text-slate-400">{item.count}</span></button>)}</section>
-      : <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/70">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 p-4"><h3 className="text-sm font-bold text-slate-100">{displayBuilding(path.building)} · {labels.floor} {path.floor} · {labels.room} {path.room} · {displayCategory(path.category)}</h3><span className="text-[10px] text-slate-400">{labels.referenceNumber} / {labels.date}</span></div>
-        {!docsAtPath.length ? <div className="p-6 text-center text-xs text-slate-400"><p>{docFilters.period !== 'all' ? labels.emptyPeriod : (docFilters.type !== 'all' || docFilters.status !== 'all' || normalizedSearch) ? labels.emptyFiltered : labels.empty}</p>{docFilters.period !== 'all' && <button type="button" onClick={() => updateDocFilters({ period: 'all' })} className="mt-3 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 font-semibold text-emerald-300 hover:bg-slate-700">{labels.resetDateFilter}</button>}</div> : <div className="divide-y divide-slate-700/70">{docsAtPath.map(doc => {
-          const status = lifecycle(doc);
-          const matchingInspections = inspectionsForDocument(doc);
-          return <article key={doc.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div className="flex min-w-0 items-start gap-3"><FileText className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400"/><div className="min-w-0"><h4 className="break-words text-xs font-semibold text-slate-100">{doc.name}</h4><p className="mt-1 break-words text-[10px] text-slate-400">{labels.referenceNumber}: {doc.reference} · {labels.date}: {doc.date} · {displayType(doc.documentType)}</p>{doc.documentType === 'ri' && <p className="mt-1 text-[10px] text-slate-400">{labels.scheduledDate}: {doc.scheduledDate} · {labels.statusLabel}: {displayStatus(status)}</p>}{doc.file_url && inferEvidenceMimeType(doc.file_name || doc.name).startsWith('image/') && <DriveImageThumbnail key={`${doc.id}:${doc.file_url}`} fileUrl={doc.file_url} fileName={doc.file_name || doc.name} label={labels.openFile} />}{doc.file_url && <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-sky-300 underline">{labels.openFile}</a>}{doc.folder_path && <p className="mt-1 break-all text-[10px] text-slate-500">{labels.folderPath}: {doc.folder_path}</p>}{doc.reasonReport && <p className="mt-2 rounded-md border border-slate-700 bg-slate-900 p-2 text-[10px] text-slate-300">{labels.archivedReason}: {doc.reasonReport}</p>}<DocumentInspectionEvidence records={matchingInspections} labels={labels} t={t} lang={lang} /></div></div>
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status === 'expired' ? 'bg-red-500/15 text-red-300' : status === 'completed' ? 'bg-emerald-500/15 text-emerald-300' : status === 'archived' ? 'bg-slate-600/30 text-slate-300' : 'bg-amber-500/15 text-amber-300'}`}>{displayStatus(status)}</span><button type="button" onClick={() => handlePreview(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={labels.documentPreview} title={labels.documentPreview}><Eye className="h-4 w-4"/></button><button type="button" onClick={() => handleDownload(doc)} className="rounded-md bg-slate-700 p-2 text-slate-200 hover:bg-slate-600" aria-label={t.common.export} title={t.common.export}><Download className="h-4 w-4"/></button>{canEdit && status === 'pending' && doc.documentType === 'ri' && <button type="button" onClick={() => markComplete(doc)} className="rounded-md bg-emerald-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-emerald-600">{labels.markComplete}</button>}{canEdit && status === 'expired' && <button type="button" onClick={() => { setReasonDoc(doc); setReasonText(doc.reasonReport || ''); }} className="rounded-md bg-red-700 px-2.5 py-2 text-[10px] font-semibold text-white hover:bg-red-600">{labels.archive}</button>}</div>
-          </article>;
-        })}</div>}
-      </section>}
-
-    {photoCollectionMode && <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-3 sm:p-6" onClick={() => setPhotoCollectionMode(null)}><section role="dialog" aria-modal="true" aria-label={labels.collectedPhotos} className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-800 shadow-2xl" onClick={event => event.stopPropagation()}><header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 p-4"><div><h2 className="text-sm font-bold text-slate-100">{labels.collectedPhotos}</h2><p className="mt-1 text-[10px] text-slate-400">{labels.photoCollectionHelp}</p></div><button type="button" onClick={() => setPhotoCollectionMode(null)} aria-label={t.common.close} className="rounded-lg bg-slate-700 p-2 text-slate-200"><X className="h-4 w-4" /></button></header><div className="flex flex-wrap items-center gap-2 border-b border-slate-700 p-3"><button type="button" onClick={() => setPhotoCollectionMode('weekly')} className={`rounded-md px-3 py-2 text-xs font-semibold ${photoCollectionMode === 'weekly' ? 'bg-sky-700 text-white' : 'bg-slate-900 text-slate-300'}`}>{labels.weeklyPhotos}</button><button type="button" onClick={() => setPhotoCollectionMode('monthly')} className={`rounded-md px-3 py-2 text-xs font-semibold ${photoCollectionMode === 'monthly' ? 'bg-violet-700 text-white' : 'bg-slate-900 text-slate-300'}`}>{labels.monthlyPhotos}</button>{photoCollectionMode === 'weekly' ? <label className="ml-auto flex items-center gap-2 text-[10px] text-slate-300">{labels.weeklyRange}<input type="week" value={docFilters.reportWeek} onChange={event => updateDocFilters({ reportWeek: event.target.value })} className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100" /></label> : <label className="ml-auto flex items-center gap-2 text-[10px] text-slate-300">{labels.monthlyRange}<input type="month" value={docFilters.reportMonth} onChange={event => updateDocFilters({ reportMonth: event.target.value })} className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100" /></label>}<span className="rounded-full bg-emerald-500/10 px-3 py-2 text-[10px] font-semibold text-emerald-300">{labels.photoCount(collectedPhotoRecords.length)}</span><button type="button" disabled={!collectedPhotoRecords.length} onClick={() => downloadFile(JSON.stringify(collectedPhotoRecords.map(record => ({ id: record.id, building: record.building, floor: record.floor, room: record.roomNumber, task: taskLabel(record.task || record.trade, lang), status: record.status, inspectedAt: record.date || record.updated_at || '', inspector: record.inspector || '', photoName: record.photo?.name || '', photoUrl: record.photo?.file_url || record.file_url || '', docReference: reportCandidateDocs.find(doc => inspectionMatchesDocument(doc, record))?.reference || '' })), null, 2), `inspection-photos-${photoCollectionMode === 'weekly' ? docFilters.reportWeek : docFilters.reportMonth}.json`, 'application/json')} className="rounded-md bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{t.common.export}</button></div><div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">{collectedPhotoRecords.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{collectedPhotoRecords.map(record => { const linkedDoc = reportCandidateDocs.find(doc => inspectionMatchesDocument(doc, record)); return <article key={record.id} className="rounded-xl border border-slate-700 bg-slate-900/70 p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-100">{linkedDoc?.reference || linkedDoc?.name || `${labels.room} ${record.roomNumber}`}</p><p className="mt-1 text-[10px] text-slate-400">{record.building} · {labels.floor} {record.floor} · {labels.room} {record.roomNumber}</p><p className="mt-1 text-[10px] text-slate-300">{taskLabel(record.task || record.trade, lang)} · {record.date || record.updated_at || '—'}</p></div><StatusBadge status={record.status} t={t} /></div><div className="mt-3"><InspectionPhotoThumbnail record={record} labels={labels} lang={lang} t={t} /></div></article>; })}</div> : <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-slate-700 text-center text-xs text-slate-400">{labels.noReportPhotos}</div>}</div></section></div>}
-
-    {uploadOpen && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-3 sm:p-5"><form onSubmit={submitUpload} className="my-auto max-h-[95vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-800 p-4 shadow-2xl sm:p-6"><div className="flex items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-100">{labels.upload}</h3><button type="button" onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 p-2 text-slate-300" aria-label={t.common.close}><X className="h-4 w-4"/></button></div>
-      <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs text-slate-300"><span>{labels.type}</span><select value={form.documentType} onChange={event => setForm(current => ({ ...current, documentType: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="general">{labels.typeGeneral}</option><option value="ri">{labels.typeRI}</option><option value="inspection">{labels.typeInspection}</option><option value="defect">{labels.typeDefect}</option></select></label>
-      <label className="space-y-1 text-xs text-slate-300"><span>{labels.reference}</span><input required value={form.reference} onChange={event => setForm(current => ({ ...current, reference: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"/></label>
-      <label className="space-y-1 text-xs text-slate-300"><span>{labels.building}</span><select value={form.building} onChange={event => { const building = event.target.value; const floor = floorsForBuilding(building)[0] || ''; const roomNumber = rooms.find(room => canonicalBuilding(room.building, room.floor) === building && String(room.floor) === floor)?.roomNumber || ''; setForm(current => ({ ...current, building, floor, roomNumber: String(roomNumber) })); }} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{buildingKeys.map(building => <option key={building} value={building}>{displayBuilding(building)}</option>)}</select></label>
-      <label className="space-y-1 text-xs text-slate-300"><span>{labels.floor}</span><select value={form.floor} onChange={event => { const floor = event.target.value; setForm(current => ({ ...current, floor, roomNumber: String(rooms.find(room => canonicalBuilding(room.building, room.floor) === current.building && String(room.floor) === floor)?.roomNumber || '') })); }} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{floors.map(floor => <option key={floor} value={floor}>{labels.floor} {floor}</option>)}</select></label>
-      <label className="space-y-1 text-xs text-slate-300"><span>{labels.room}</span><select required value={form.roomNumber} onChange={event => setForm(current => ({ ...current, roomNumber: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100">{roomOptions.map(room => <option key={room.id} value={room.roomNumber}>{labels.room} {room.roomNumber}</option>)}</select></label>
-      <label className="space-y-1 text-xs text-slate-300"><span>{labels.category}</span><select value={form.category} onChange={event => setForm(current => ({ ...current, category: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"><option value="Architecture">{labels.architecture}</option><option value="MEP">{labels.mep}</option><option value="Structure">{labels.structure}</option></select></label>
-      {form.documentType === 'ri' && <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.scheduledDate} *</span><input type="date" required min={today} value={form.scheduledDate} onChange={event => setForm(current => ({ ...current, scheduledDate: event.target.value }))} className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100"/></label>}
-      <label className="space-y-1 text-xs text-slate-300 sm:col-span-2"><span>{labels.file}</span><input type="file" accept="application/pdf,image/*" required disabled={savingUpload} onChange={event => { const file = event.target.files?.[0] || null; if (file && file.size > MAX_UPLOAD_BYTES) { setForm(current => ({ ...current, file: null })); setFormError(t.storage.fileTooLarge); event.target.value = ''; return; } setFormError(''); setForm(current => ({ ...current, file })); }} className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-700 file:px-3 file:py-2 file:text-xs file:text-white disabled:opacity-50"/></label></div>
-      {savingUpload && <div role="status" className="rounded-lg border border-sky-500/30 bg-sky-950/30 px-3 py-2 text-xs text-sky-200"><span className="mb-2 block">{t.storage.saving}</span><div className="h-1.5 overflow-hidden rounded-full bg-slate-700"><div className="h-full w-2/3 animate-pulse rounded-full bg-sky-400" /></div></div>}{formError && <p role="alert" className="text-xs font-semibold text-red-300">{formError}</p>}<div className="flex flex-col-reverse gap-2 border-t border-slate-700 pt-3 sm:flex-row sm:justify-end"><button type="button" disabled={savingUpload} onClick={() => setUploadOpen(false)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200 disabled:opacity-50">{labels.cancel}</button><button type="submit" disabled={savingUpload} className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-wait disabled:opacity-60">{savingUpload ? t.storage.saving : labels.save}</button></div>
-    </form></div>}
-
-    {reasonDoc && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-3 sm:p-5"><form onSubmit={submitReason} className="w-full max-w-lg space-y-4 rounded-2xl border border-red-900 bg-slate-800 p-5 shadow-2xl sm:p-6"><div><h3 className="text-base font-bold text-red-200">{labels.expiredTitle}</h3><p className="mt-1 text-xs text-slate-400">{labels.expiredDescription}</p><p className="mt-2 text-xs text-slate-300">{reasonDoc.reference} · {reasonDoc.name}</p></div><label className="block space-y-1.5 text-xs font-semibold text-slate-200"><span>{labels.reasonLabel} *</span><textarea autoFocus required minLength={5} value={reasonText} onChange={event => setReasonText(event.target.value)} placeholder={labels.reasonPlaceholder} rows={5} className="w-full resize-y rounded-lg border border-slate-600 bg-slate-900 p-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-red-400 focus:outline-none"/></label><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setReasonDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-200">{labels.cancel}</button><button type="submit" disabled={reasonText.trim().length < 5} className="rounded-lg bg-red-700 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{labels.archive}</button></div></form></div>}
-
-    {selectedDoc && <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/75 p-3 sm:p-5"><section role="dialog" aria-modal="true" aria-label={labels.documentPreview} className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-800"><header className="flex items-center justify-between gap-3 border-b border-slate-700 p-4"><div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-100">{labels.documentPreview}</h3><p className="truncate text-[10px] text-slate-400">{selectedDoc.reference} · {selectedDoc.name}</p></div><button type="button" onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 p-2 text-slate-200"><X className="h-4 w-4"/></button></header><div className="grid min-h-56 place-items-center bg-slate-950 p-3 text-center text-xs text-slate-400 sm:min-h-80">
-      {selectedDoc.previewUrl && (selectedDoc.file?.type.startsWith('image/') || inferEvidenceMimeType(selectedDoc.name).startsWith('image/')) ? <img src={selectedDoc.previewUrl} alt={selectedDoc.name} className="max-h-[65vh] max-w-full object-contain"/> : selectedDoc.previewUrl && selectedDoc.file?.type === 'application/pdf' ? <iframe title={selectedDoc.name} src={selectedDoc.previewUrl} className="h-[65vh] w-full rounded bg-white"/> : selectedDoc.file_url && inferEvidenceMimeType(selectedDoc.file_name || selectedDoc.name).startsWith('image/') && !previewImageFailed ? <img src={safeDriveImageUrl(selectedDoc.file_url)} alt={selectedDoc.name} onError={() => setPreviewImageFailed(true)} className="max-h-[65vh] max-w-full object-contain"/> : selectedDoc.file_url && inferEvidenceMimeType(selectedDoc.file_name || selectedDoc.name).startsWith('image/') && previewImageFailed ? <iframe title={selectedDoc.name} src={selectedDoc.file_url} className="h-[65vh] w-full rounded bg-white"/> : selectedDoc.file_url && (inferEvidenceMimeType(selectedDoc.file_name || selectedDoc.name) === 'application/pdf' || selectedDoc.name.toLowerCase().endsWith('.pdf')) ? <iframe title={selectedDoc.name} src={selectedDoc.file_url} className="h-[65vh] w-full rounded bg-white"/> : <div><FileText className="mx-auto mb-2 h-9 w-9 text-emerald-400"/><p>{selectedDoc.name}</p><p className="mt-1">{displayType(selectedDoc.documentType)} · {displayStatus(lifecycle(selectedDoc))}</p></div>}
-      </div><footer className="flex flex-col-reverse gap-2 border-t border-slate-700 p-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap gap-2">{selectedDoc.file_url && <a href={selectedDoc.file_url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-200">{labels.openFile}</a>}<button onClick={() => { handleDownload(selectedDoc); setSelectedDoc(null); }} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white">{t.common.export}</button></div><button onClick={() => setSelectedDoc(null)} className="rounded-lg bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200">{t.common.close}</button></footer></section></div>}
-  </div>;
+  const zone = (name, className) => <button type="button" onClick={() => { setLocation(name); setPlanOpen(false); }} className={`absolute ${className} grid place-items-center rounded-lg border text-[10px] font-semibold transition hover:ring-2 hover:ring-lime-400 ${location === name ? 'border-rose-500 bg-rose-100 text-rose-800 ring-2 ring-rose-200' : 'border-slate-300 bg-white/90 text-slate-600'}`}>{name}{location === name && <MapPin size={13} className="text-rose-600"/>}</button>;
+  return <Modal title={`${event ? 'Retry / Revise Inspection' : 'Inspection Form'} · ${request.requestNo}`} onClose={onClose} size="max-w-5xl"><div className="space-y-4"><div className="grid gap-3 rounded-2xl bg-emerald-950 p-4 text-white sm:grid-cols-4">{[['Project',project.name],['Schedule',`${request.appointment} · ${request.time}`],['Request',request.requestNo],['Work Stage',request.stage]].map(([label,value]) => <div key={label}><p className="text-[10px] text-emerald-100/55">{label}</p><b className="mt-1 block text-xs">{value}</b></div>)}</div><div className="grid gap-4 lg:grid-cols-[1fr_.95fr]"><section className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><Field label="เลือกห้องที่กำลังตรวจ"><select className={inputClass} value={room} onChange={e => setRoom(e.target.value)}>{request.rooms.map(r => <option key={r}>{r}</option>)}</select></Field><Field label="ผู้บันทึก (SE)"><input className={inputClass} value={recorder} onChange={e => setRecorder(e.target.value)}/></Field></div><div><div className="mb-2 flex items-center justify-between"><b className="text-xs">Inspection Checklist</b><span className="text-[10px] text-slate-400">Status: Pass / Fail / ยังไม่ระบุ</span></div><div className="space-y-2">{CHECKLIST.map(item => <div key={item} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2.5"><span className="text-xs">{item}</span><select value={checklist[item]} onChange={e => setChecklist(c => ({ ...c, [item]: e.target.value }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"><option>ยังไม่ระบุ</option><option>Pass</option><option>Fail</option></select></div>)}</div></div><div className="grid gap-3 sm:grid-cols-2"><Field label="สรุป / Defect Description"><textarea className={`${inputClass} min-h-20 resize-y`} value={defect} onChange={e => setDefect(e.target.value)} placeholder="Describe issue or leave blank"/></Field><div><Field label="ตำแหน่ง Defect"><button type="button" onClick={() => setPlanOpen(true)} className={`${inputClass} flex items-center justify-between text-left`}><span className="truncate">{location || 'Select location (3D Plan)'}</span><MapPin size={15}/></button></Field><div className="mt-2 flex gap-1.5"><input className={`${inputClass} py-2`} value={defectInput} onChange={e => setDefectInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addDefect())} placeholder="Add Defect"/><Button type="button" variant="secondary" className="min-h-9 px-2" onClick={addDefect}><Plus size={14}/></Button></div>{defects.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{defects.map((d,i) => <button key={`${d}-${i}`} type="button" onClick={() => setDefects(list => list.filter((_,j) => i !== j))} className="rounded-full bg-rose-50 px-2 py-1 text-[10px] text-rose-700">{d} ×</button>)}</div>}</div></div><Field label="Inspection Note"><textarea className={`${inputClass} min-h-16`} value={note} onChange={e => setNote(e.target.value)} placeholder="Notes for the project record"/></Field>{event && <Field label="Revise Doc."><input className={inputClass} value={reviseDoc} onChange={e => setReviseDoc(e.target.value)} placeholder="Revision reference / reason"/></Field>}</section>
+      <section className="space-y-4"><Card title="Add Photos / Evidence" subtitle="Capture with camera or upload image files"><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" onClick={() => { setCameraOpen(true); onCamera(); }}><Camera size={15}/>Open Camera</Button><label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold hover:bg-slate-50"><Upload size={15}/>Add Photos<input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={e => addEvidenceFiles([...e.target.files])}/></label></div>{evidence.length > 0 ? <div className="mt-3 grid grid-cols-3 gap-2">{evidence.map(photo => <div key={photo.id} className="relative overflow-hidden rounded-xl border border-slate-200">{photo.dataUrl && photo.type.startsWith('image/') ? <img src={photo.dataUrl} alt={photo.name} className="h-20 w-full object-cover"/> : <div className="grid h-20 place-items-center bg-slate-50"><FileText/></div>}<p className="truncate p-1 text-[9px]">{photo.name}</p><button type="button" onClick={() => setEvidence(list => list.filter(x => x.id !== photo.id))} className="absolute right-1 top-1 rounded-full bg-white/90 p-1 text-rose-600"><X size={11}/></button></div>)}</div> : <p className="mt-3 rounded-xl bg-slate-50 p-3 text-[10px] text-slate-400">No evidence attached yet.</p>}{cameraOpen && <div className="mt-3 rounded-xl bg-emerald-950 p-3 text-white">{cameraState === 'active' ? <><video ref={videoRef} autoPlay playsInline className="max-h-56 w-full rounded-lg bg-black object-cover"/><div className="mt-2 flex gap-2"><Button type="button" onClick={onCapture}><Camera size={14}/>Capture photo</Button><Button type="button" variant="secondary" onClick={() => { onStopCamera(); setCameraOpen(false); }}>Close camera</Button></div></> : <div className="flex items-center justify-between gap-2"><p className="text-xs">{cameraState === 'requesting' ? 'Requesting camera permission…' : 'Camera unavailable. Use Add Photos to select an image.'}</p><Button type="button" variant="secondary" onClick={() => { onStopCamera(); setCameraOpen(false); }}>Close</Button></div>}</div>}</Card><Card title="CM Inspection Confirmation" subtitle="Confirm participation and attendance"><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={cmConfirm} onChange={e => setCmConfirm(e.target.checked)} className="mt-0.5 accent-lime-500"/>CM representative attended inspection</label><label className="mt-3 flex items-start gap-2 text-xs"><input type="checkbox" checked={cmWitness} onChange={e => setCmWitness(e.target.checked)} className="mt-0.5 accent-lime-500"/>Inspection result acknowledged by site team</label></Card><Card title="Inspection Result" subtitle="Calculated from checklist and defects"><div className="flex items-center justify-between"><ResultBadge status={Object.values(checklist).includes('Fail') || defect.trim() || defects.length ? 'Fail' : Object.values(checklist).every(v => v === 'Pass') ? 'Pass' : 'Pending'}/><span className="text-[10px] text-slate-400">Room {room}</span></div></Card></section></div>
+    {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</p>}<div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4"><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button type="button" variant="secondary" disabled={saving} onClick={() => save(true)}>บันทึกภายหลัง</Button><Button type="button" disabled={saving} onClick={() => save(false)}><CheckCircle2 size={15}/>{saving ? 'Saving…' : 'Save Inspection Event'}</Button></div></div>
+    {planOpen && <Modal title={`Select location · Room ${room}`} onClose={() => setPlanOpen(false)} size="max-w-xl"><p className="mb-3 text-xs text-slate-500">Tap a room surface to place a defect marker.</p><div className="relative mx-auto aspect-[4/3] max-w-md overflow-hidden rounded-2xl border-2 border-slate-300 bg-[#eef1ec] p-5 shadow-inner"><div className="absolute inset-[8%] skew-y-[-2deg] border-4 border-slate-400 bg-[#faf9f3] shadow-xl"/><div className="absolute left-[16%] top-[18%] h-[30%] w-[34%] -skew-y-2 rounded border-2 border-slate-300 bg-sky-50/80"/><div className="absolute right-[15%] top-[18%] h-[23%] w-[29%] -skew-y-2 rounded border-2 border-slate-300 bg-white"/><div className="absolute bottom-[15%] left-[16%] h-[25%] w-[27%] -skew-y-2 rounded border-2 border-cyan-300 bg-cyan-50"/><div className="absolute bottom-[15%] right-[15%] h-[25%] w-[30%] -skew-y-2 rounded border-2 border-amber-300 bg-amber-50"/>{zone('ผนังด้านเหนือ','left-[40%] top-[6%] h-8 w-24')}{zone('มุมผนังด้านหน้า','left-[37%] top-[39%] h-8 w-28')}{zone('พื้นห้อง','left-[42%] bottom-[14%] h-8 w-24')}{zone('ห้องน้ำ','left-[10%] bottom-[22%] h-8 w-20')}{zone('ประตูทางเข้า','right-[5%] top-[49%] h-8 w-24')}</div><div className="mt-4 flex justify-end"><Button variant="secondary" onClick={() => setPlanOpen(false)}>Done · {location || 'No position selected'}</Button></div></Modal>}
+  </Modal>;
 }
 
-// ==========================================
-// MODULE 6: AI WORKBENCH ASSISTANT
-// ==========================================
-function AIAssistantView({ showToast }) {
-  const [aiReport, setAiReport] = useState(null);
+function EventDetail({ event, onClose }) { return <div className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4"><div><b>{event.requestNo} · Room {event.room}</b><p className="mt-1 text-xs text-slate-500">{event.stage} · {event.date} · {event.recorder}</p></div><ResultBadge status={event.result}/></div><div className="grid gap-2 sm:grid-cols-2">{Object.entries(event.checklist || {}).map(([label,value]) => <div key={label} className="flex justify-between rounded-xl border border-slate-100 p-3 text-xs"><span>{label}</span><Badge color={value === 'Pass' ? 'green' : value === 'Fail' ? 'rose' : 'slate'}>{value}</Badge></div>)}</div><div className="rounded-xl bg-slate-50 p-3"><b className="text-xs">Defect / Summary</b><p className="mt-1 text-xs text-slate-600">{event.defect || 'No defect recorded'}</p><p className="mt-2 text-[10px] text-slate-500">Location: {event.location || '—'}</p><p className="mt-1 text-[10px] text-slate-500">Note: {event.note || '—'}</p></div><div><b className="text-xs">Evidence</b><div className="mt-2 flex flex-wrap gap-2">{event.evidence?.map(file => <a key={file.id} href={file.dataUrl || '#'} onClick={e => { if (!file.dataUrl) e.preventDefault(); }} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs"><FileText size={14}/>{file.name}</a>)}{!event.evidence?.length && <p className="text-xs text-slate-400">No evidence attached.</p>}</div></div><div className="flex justify-end"><Button variant="secondary" onClick={onClose}>Close</Button></div></div>; }
 
-  const generateReport = () => {
-    showToast("AI กำลังประมวลผลสรุปรายงานโครงการ...");
-    setTimeout(() => {
-      setAiReport({
-        summary: "จากการวิเคราะห์ข้อมูล 216 ห้อง พบว่าความก้าวหน้าโดยรวมอยู่ที่ 74% โดยงาน Finishing Paint และ Tiling บนชั้น 4-5 อยู่ในเกณฑ์สมบูรณ์สูง แนะนำให้เพิ่มอัตรากำลังช่างประตูกระจกเพื่อเร่งรัดการส่งมอบชั้น 7-8",
-        topDefect: "งานทาสี Finish Paint 1 (พบรอยด่าง 18 จุด)",
-        handoverForecast: "คาดว่าจะพร้อมส่งมอบทั้งโครงการภายในวันที่ 15 พฤศจิกายน 2026"
-      });
-    }, 1500);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-emerald-950/60 to-slate-800 p-6 rounded-2xl border border-emerald-500/30 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-400/40">
-            <Bot className="w-7 h-7" />
-          </div>
-          <div>
-            <h2 className="font-bold text-lg text-slate-100">AI Executive Workbench</h2>
-            <p className="text-xs text-slate-400">เครื่องมือวิเคราะห์อัจฉริยะ ตรวจจับ Defect อัตโนมัติและสรุปรายงานบริหาร</p>
-          </div>
-        </div>
-        <button 
-          onClick={generateReport}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg"
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>สร้างรายงานสรุป AI (Generate Insights)</span>
-        </button>
-      </div>
-
-      {aiReport && (
-        <div className="bg-slate-800/90 border border-emerald-500/50 rounded-xl p-6 space-y-4 animate-fade-in">
-          <h3 className="font-bold text-sm text-emerald-400 flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />
-            <span>ผลการวิเคราะห์ภาพรวมบริหาร (AI Summary Output)</span>
-          </h3>
-          <p className="text-xs text-slate-200 leading-relaxed bg-slate-900/60 p-4 rounded-lg border border-slate-700">
-            {aiReport.summary}
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="p-3 bg-red-950/30 border border-red-500/30 rounded-lg">
-              <span className="text-red-400 font-bold block mb-1">จุดต้องแก้ไขด่วน (Top Defect Trade):</span>
-              <span className="text-slate-200">{aiReport.topDefect}</span>
-            </div>
-            <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-lg">
-              <span className="text-emerald-400 font-bold block mb-1">ประมาณการวันส่งมอบ (Forecast):</span>
-              <span className="text-slate-200">{aiReport.handoverForecast}</span>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+function DocumentModal({ project, doc, requests, floors, onClose, onToast, updateData }) {
+  const [form, setForm] = useState(() => doc ? { ...doc } : { name: '', type: 'Inspection Report', requestNo: requests[0]?.requestNo || '', building: 'Building A', floor: '1', room: '101', round: 'Round 1', date: todayIso(), uploadedBy: 'Phattarawadee Sroiphap', dataUrl: '', size: '' });
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const submit = async e => { e.preventDefault(); if (!form.name.trim()) { setError('Choose a file or enter a document name.'); return; } setBusy(true); const record = { ...form, id: doc?.id || uid(), projectId: project.id, uploadedBy: form.uploadedBy || 'Site Engineer' }; updateData(c => ({ ...c, docs: doc ? c.docs.map(d => d.id === doc.id ? record : d) : [record, ...c.docs] })); onToast(doc ? 'Document updated.' : 'Document uploaded to this prototype.'); setBusy(false); onClose(); };
+  const pickFile = async file => { if (!file) return; if (file.size > 5 * 1024 * 1024) { setError('File exceeds the 5 MB prototype limit.'); return; } setForm(f => ({ ...f, name: file.name, size: file.size > 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(file.size / 1024)} KB` })); if (file.size <= 1_700_000) { try { setForm(f => ({ ...f, name: file.name, size: file.size > 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(file.size / 1024)} KB` })); const dataUrl = await fileToDataUrl(file); setForm(f => ({ ...f, name: file.name, dataUrl })); } catch { setError('Could not read this file.'); } } else setError('Large file metadata is saved; choose a file under 1.7 MB to embed it for preview/download in this prototype.'); };
+  return <Modal title={doc ? 'Edit Project Document' : 'Upload Project Document'} onClose={onClose} size="max-w-2xl"><form onSubmit={submit} className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><Field label="Choose File"><input type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.docx" className="block w-full rounded-xl border border-dashed border-slate-300 p-3 text-xs" onChange={e => pickFile(e.target.files?.[0])}/></Field><Field label="Document Name"><input className={inputClass} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="File name"/></Field><Field label="Document Type"><select className={inputClass} value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>{['Drawing','Request / RI','Inspection Report','Checklist','Site Photo','Other'].map(x => <option key={x}>{x}</option>)}</select></Field><Field label="Request"><select className={inputClass} value={form.requestNo} onChange={e => setForm({ ...form, requestNo: e.target.value })}><option value="">No request linked</option>{requests.map(r => <option key={r.id}>{r.requestNo}</option>)}</select></Field><Field label="Building"><select className={inputClass} value={form.building} onChange={e => setForm({ ...form, building: e.target.value })}><option>Building A</option><option>Building B</option></select></Field><Field label="Floor"><select className={inputClass} value={form.floor} onChange={e => setForm({ ...form, floor: e.target.value })}>{floors.map(f => <option key={f} value={f}>ชั้น {f}</option>)}</select></Field><Field label="Room"><input className={inputClass} value={form.room} onChange={e => setForm({ ...form, room: e.target.value })}/></Field><Field label="Inspection Round"><select className={inputClass} value={form.round} onChange={e => setForm({ ...form, round: e.target.value })}>{['Round 1','Round 2','Round 3','Final'].map(x => <option key={x}>{x}</option>)}</select></Field><Field label="Document Date"><input type="date" className={inputClass} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}/></Field></div>{error && <p role="alert" className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{error}</p>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{doc ? <Pencil size={14}/> : <Upload size={14}/>} {busy ? 'Saving…' : doc ? 'Save Changes' : 'Upload Document'}</Button></div></form></Modal>;
 }
 
-// ==========================================
-// MODULE 7: HANDOVER HEATMAP DASHBOARD
-// ==========================================
-function HandoverDashboardView({ rooms, selectedFloor = 'all', selectedStatusFilter = 'all', onInspectRoom, showToast }) {
-  const displayedRooms = rooms.filter(room => (selectedFloor === 'all' || room.floor.toString() === selectedFloor) && (selectedStatusFilter === 'all' || room.status === selectedStatusFilter));
-  const displayedFloors = selectedFloor === 'all' ? [8, 7, 6, 5, 4, 3, 2, 1] : [Number(selectedFloor)];
-  const exportCsv = () => {
-    const rows = [['Room', 'Floor', 'Type', 'Status', 'Progress', 'Defects'], ...displayedRooms.map(room => [room.roomNumber, room.floor, room.type, room.status, `${room.progress}%`, room.defectsCount])];
-    downloadFile(`\uFEFF${rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')}`, 'trex-handover-report.csv', 'text/csv;charset=utf-8');
-    showToast('ดาวน์โหลดรายงาน Excel (CSV) แล้ว');
-  };
-  const printReport = () => { window.print(); };
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between bg-slate-800/80 p-4 rounded-xl border border-slate-700">
-        <div>
-          <h2 className="font-bold text-base text-slate-100">แผนผังสถานะการส่งมอบ (Building Handover Heatmap)</h2>
-          <p className="text-xs text-slate-400">ภาพรวม 8 ชั้น x 27 ห้องพัก (สีเขียว = พร้อมส่งมอบ / สีแดง = พบ Defect)</p>
-        </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={printReport}
-            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5"
-          >
-            <FilePdf className="w-4 h-4 text-red-400" />
-            <span>PDF Export</span>
-          </button>
-          <button 
-            onClick={exportCsv}
-            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Excel Export</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Heatmap Grid */}
-      <div className="bg-slate-800/70 border border-slate-700 p-6 rounded-xl space-y-4">
-        {displayedFloors.map(floor => (
-          <div key={floor} className="flex items-center gap-3">
-            <span className="w-14 text-xs font-bold text-slate-300">ชั้น {floor}</span>
-            <div className="flex-1 grid grid-cols-[repeat(27,minmax(0,1fr))] gap-1">
-              {displayedRooms.filter(r => r.floor === floor).map(room => (
-                <div
-                  key={room.id}
-                  onClick={() => onInspectRoom(room)}
-                  title={`ห้อง ${room.roomNumber}: ${room.status}`}
-                  className={`h-7 rounded cursor-pointer transition-all hover:scale-125 flex items-center justify-center text-[9px] font-bold ${
-                    room.status === 'ready' 
-                      ? 'bg-emerald-500 text-slate-950' 
-                      : room.status === 'defect' 
-                      ? 'bg-red-500 text-white animate-pulse' 
-                      : room.status === 'pending' ? 'bg-slate-500 text-white' : 'bg-blue-500 text-white'
-                  }`}
-                >
-              {room.roomNumber.slice(-2)}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// STATUS BADGE UTILITY COMPONENT
-// ==========================================
-function StatusBadge({ status, t }) {
-  if (status === 'ready' || status === 'passed') {
-    return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-        {t.status.ready}
-      </span>
-    );
-  }
-  if (status === 'defect') {
-    return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-        {t.status.defect}
-      </span>
-    );
-  }
-  if (status === 'pending') {
-    return <span className="rounded border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-[10px] font-bold text-slate-300">{t.status.pending}</span>;
-  }
-  return (
-    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-      {t.status.inProgress}
-    </span>
-  );
-}
-
-// ==========================================
-// ROOM DETAIL INSPECTION MODAL
-// ==========================================
-const TASK_PLAN_POSITIONS = [
-  [37.5, 31.8], [21.8, 61.9], [55.6, 61.9], [22, 82.8], [78, 67.6], [78, 28.4], [63.2, 42.9],
-  [63.2, 49], [68.8, 49], [27.1, 20.6], [34.4, 42.9], [29.7, 47.4], [45, 84.9],
-];
-const TASK_12_SECONDARY_POSITION = [53.3, 84.9];
-
-function RoomPlan({ room, t, lang, records = [] }) {
-  const [selectedTaskIndex, setSelectedTaskIndex] = useState(0);
-  const markerColor = (status) => status === 'passed' ? '#10b981' : status === 'defect' ? '#ef4444' : status === 'inProgress' ? '#f59e0b' : '#64748b';
-  const selectedTask = TASKS_13[selectedTaskIndex];
-  const selectedRecord = [...records].filter(record => String(record.roomNumber) === String(room.roomNumber) && String(record.floor) === String(room.floor) && canonicalBuilding(record.building, record.floor) === canonicalBuilding(room.building, room.floor) && record.task === selectedTask).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
-  return <section className="space-y-2 rounded-xl border border-slate-700 bg-slate-900 p-4">
-    <div><h4 className="text-sm font-bold text-slate-100">{lang === 'th' ? 'แผนผังห้องพร้อมตำแหน่งงานตรวจ' : 'Room Plan Task Map'}</h4><p className="text-[10px] text-slate-400">{lang === 'th' ? 'เลือกหมายเลขเพื่อดูผลตรวจของตำแหน่งนั้น' : 'Select a marker to view the inspection details for that location.'}</p></div>
-    <div className="mx-auto max-h-[560px] max-w-[500px] overflow-hidden rounded-lg bg-slate-900">
-      <div className="relative aspect-[408/454] w-full">
-        <img src={roomPlanImage} alt="Room plan with inspection task markers" className="absolute inset-0 h-full w-full object-contain" />
-        {TASKS_13.map((task, index) => {
-        const [x, y] = TASK_PLAN_POSITIONS[index];
-        const status = room.tasks?.[task] || 'pending';
-        return <React.Fragment key={task}><button type="button" aria-label={`${index + 1}. ${taskLabel(task, lang)}`} aria-pressed={selectedTaskIndex === index} onClick={() => setSelectedTaskIndex(index)} title={`${index + 1}. ${taskLabel(task, lang)}: ${status}`} className={`absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[10px] font-extrabold shadow-md ${selectedTaskIndex === index ? 'z-10 scale-125 ring-2 ring-white' : ''} ${status === 'inProgress' ? 'text-slate-950' : 'text-white'}`} style={{ left: `${x}%`, top: `${y}%`, backgroundColor: markerColor(status) }}>{index + 1}</button>{index === 11 && <button type="button" aria-label="12. Shower Screen secondary position" onClick={() => setSelectedTaskIndex(11)} title={`12. ${taskLabel(task, lang)}`} className="absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[10px] font-extrabold text-white shadow-md" style={{ left: `${TASK_12_SECONDARY_POSITION[0]}%`, top: `${TASK_12_SECONDARY_POSITION[1]}%`, backgroundColor: markerColor(status) }}>12</button>}</React.Fragment>;
-      })}
-      </div>
-    </div>
-    <div className="rounded-lg border border-slate-700 bg-slate-800/70 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-slate-100">{selectedTaskIndex + 1}. {taskLabel(selectedTask, lang)}</b><StatusBadge status={room.tasks?.[selectedTask] || 'pending'} t={t} /></div><p className="mt-2 text-slate-300">{t.records.inspector}: {selectedRecord?.inspector || '—'} · {t.records.inspectionDate}: {selectedRecord?.date ? new Date(selectedRecord.date).toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US') : '—'}</p><p className="mt-1 text-slate-400">{selectedRecord?.remarks || '—'}</p>{selectedRecord?.photo?.file_url && <a className="mt-2 inline-block text-sky-300 underline" href={selectedRecord.photo.file_url} target="_blank" rel="noopener noreferrer">{t.records.viewPhotos}</a>}{selectedRecord?.riDocument?.file_url && <a className="ml-3 mt-2 inline-block text-sky-300 underline" href={selectedRecord.riDocument.file_url} target="_blank" rel="noopener noreferrer">{t.records.viewRiDocument}</a>}</div>
-    <div className="flex flex-wrap gap-3 text-[10px] text-slate-400">{[['passed', '#10b981'], ['defect', '#ef4444'], ['inProgress', '#f59e0b'], ['pending', '#64748b']].map(([key, color]) => <span key={key} className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />{t.status[key]}</span>)}</div>
-  </section>;
-}
-
-function RoomDetailModal({ room, t, lang, records = [], showToast, onClose }) {
-  const [evidencePreview, setEvidencePreview] = useState(null);
-  const [loadingEvidence, setLoadingEvidence] = useState('');
-  useEffect(() => () => {
-    if (evidencePreview?.ownedUrl) URL.revokeObjectURL(evidencePreview.url);
-  }, [evidencePreview]);
-
-  const openEvidence = async (record, kind) => {
-    const key = `${record.id}:${kind}`;
-    setLoadingEvidence(key);
-    try {
-      let blob = null;
-      try { blob = await loadInspectionEvidence(kind === 'ri' && record.riDocument?.document_id ? record.riDocument.document_id : record.evidence_id || record.id, kind === 'ri' && record.riDocument?.document_id ? 'photo' : kind); }
-      catch (storageError) {
-        if (!(record.file_url || record.photo?.file_url || record.riDocument?.file_url)) throw storageError;
-      }
-      const remoteUrl = record.file_url || record.photo?.file_url || record.riDocument?.file_url || '';
-      const metadata = kind === 'photo' ? record.photo : record.riDocument;
-      if (!blob && remoteUrl) {
-        const name = metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document');
-        const mimeType = metadata?.type || inferEvidenceMimeType(name);
-        const isImage = kind === 'photo' || mimeType.startsWith('image/');
-        setEvidencePreview({ url: isImage ? safeDriveImageUrl(remoteUrl) : remoteUrl, fallbackUrl: remoteUrl, type: mimeType, name, kind, ownedUrl: false, remote: true, isImage });
-        return;
-      }
-      if (!blob) {
-        showToast?.(t.records.evidenceUnavailable);
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      setEvidencePreview({ url, type: blob.type || metadata?.type || inferEvidenceMimeType(metadata?.name), name: metadata?.name || (kind === 'photo' ? 'inspection-photo' : 'RI-document'), kind, ownedUrl: true, remote: false });
-    } catch (error) {
-      console.error('Unable to open inspection evidence:', error);
-      showToast?.(t.records.evidenceError);
-    } finally {
-      setLoadingEvidence('');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-5xl w-full p-6 space-y-5 shadow-2xl max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-slate-700 pb-4">
-          <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>{lang === 'th' ? 'รายละเอียดห้องพัก' : 'Room Details'} {room.roomNumber} · {room.building === BUILDING_B ? t.documents.buildingB : t.documents.buildingA}</span>
-              <span className="text-xs font-normal text-slate-400">({room.type})</span>
-            </h3>
-            <p className="text-xs text-slate-400">ชั้น {room.floor} • ผู้ตรวจล่าสุด: {room.lastInspector}</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-700/50">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Room data is read-only in this view. */}
-        <div className="flex items-center justify-between bg-slate-900 p-3.5 rounded-xl border border-slate-700">
-          <span className="text-xs font-medium text-slate-300">สถานะหลักของห้อง (Overall Room Status)</span>
-          <StatusBadge status={room.status} t={t} />
-        </div>
-
-        <RoomPlan room={room} t={t} lang={lang} records={records} />
-
-        {/* 13 Tasks Checklist Toggles */}
-        <div>
-          <h4 className="text-xs font-bold text-slate-200 mb-2">สถานะงาน 13 รายการ (13-Task Inspection Checklist)</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {TASKS_13.map((tName, index) => {
-              const taskStatus = room.tasks?.[tName] || 'pending';
-              const isPassed = taskStatus === 'passed';
-              const taskRecords = records.filter(record => String(record.roomNumber) === String(room.roomNumber) && String(record.floor) === String(room.floor) && canonicalBuilding(record.building, record.floor) === canonicalBuilding(room.building, room.floor) && record.task === tName);
-              const photoRecord = taskRecords.find(record => record.photo);
-              const riRecord = taskRecords.find(record => record.riDocument);
-              return (
-                <div
-                  key={tName}
-                  className={`p-2.5 rounded-lg border text-xs ${
-                    isPassed 
-                      ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
-                      : taskStatus === 'defect' ? 'bg-red-950/30 border-red-500/40 text-red-300' : taskStatus === 'pending' ? 'bg-slate-900/40 border-slate-700 text-slate-300' : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium"><span className="mr-1 font-bold">{index + 1}.</span>{taskLabel(tName, lang)}</span>
-                    <StatusBadge status={taskStatus} t={t} />
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button type="button" disabled={!photoRecord || loadingEvidence === `${photoRecord?.id}:photo`} onClick={() => photoRecord && openEvidence(photoRecord, 'photo')} className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-semibold text-sky-300 enabled:hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={t.records.viewPhotos}><Eye className="h-3 w-3" />{t.records.viewPhotos}</button>
-                    <button type="button" disabled={!riRecord || loadingEvidence === `${riRecord?.id}:ri`} onClick={() => riRecord && openEvidence(riRecord, 'ri')} className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300 enabled:hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40" title={t.records.viewRiDocument}><FileText className="h-3 w-3" />{t.records.viewRiDocument}</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex justify-end border-t border-slate-700 pt-3"><button onClick={onClose} className="rounded-xl bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-600">{t.common.close}</button></div>
-      </div>
-      {evidencePreview && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4" onClick={() => setEvidencePreview(null)}>
-        <section role="dialog" aria-modal="true" aria-label="Evidence Preview" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl" onClick={event => event.stopPropagation()}>
-          <header className="flex items-center justify-between gap-3 border-b border-slate-700 px-4 py-3"><div className="min-w-0"><h3 className="text-sm font-bold text-slate-100">{t.records.evidencePreview}</h3><p className="truncate text-xs text-slate-400">{evidencePreview.name}</p></div><button type="button" onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-800 p-2 text-slate-300 hover:bg-slate-700" aria-label={t.common.close}><X className="h-4 w-4" /></button></header>
-          <div className="min-h-0 flex-1 overflow-auto bg-slate-950 p-3">
-            {evidencePreview.remote && evidencePreview.isImage && !evidencePreview.imageFallback ? <img src={evidencePreview.url} alt={evidencePreview.name} onError={() => setEvidencePreview(current => current ? { ...current, url: current.fallbackUrl, imageFallback: true } : current)} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.remote ? <iframe title={evidencePreview.name} src={evidencePreview.fallbackUrl || evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : evidencePreview.type.startsWith('image/') ? <img src={evidencePreview.url} alt={evidencePreview.name} className="mx-auto max-h-[75vh] max-w-full object-contain" /> : evidencePreview.type === 'application/pdf' || evidencePreview.name.toLowerCase().endsWith('.pdf') ? <iframe title={evidencePreview.name} src={evidencePreview.url} className="h-[75vh] w-full rounded-lg bg-white" /> : <div className="grid h-48 place-items-center text-center"><div><FileText className="mx-auto mb-2 h-8 w-8 text-slate-400" /><a href={evidencePreview.url} download={evidencePreview.name} className="text-sm font-semibold text-sky-300 underline">{t.records.fileLink}</a></div></div>}
-          </div>
-          <footer className="flex justify-end border-t border-slate-700 px-4 py-3"><a href={evidencePreview.fallbackUrl || evidencePreview.url} download={evidencePreview.name} target="_blank" rel="noopener noreferrer" className="mr-auto self-center text-xs text-sky-300 underline">{t.records.fileLink}</a><button onClick={() => setEvidencePreview(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-600">{t.common.close}</button></footer>
-        </section>
-      </div>}
-    </div>
-  );
-}
+function DocumentDetail({ doc, onClose }) { const isImage = doc.dataUrl && doc.dataUrl.startsWith('data:image/'); const isPdf = doc.dataUrl && doc.dataUrl.startsWith('data:application/pdf'); return <Modal title="Document Preview" onClose={onClose} size="max-w-4xl"><div className="space-y-4"><div className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-slate-50 p-4"><div><b className="text-sm">{doc.name}</b><p className="mt-1 text-xs text-slate-500">{doc.type} · {doc.requestNo || 'No request'} · Room {doc.room}</p><p className="mt-1 text-[10px] text-slate-400">{doc.building} · Floor {doc.floor} · {doc.round} · {doc.date} · {doc.size}</p></div><Button variant="secondary" onClick={() => downloadRecord(doc, doc.name)}><Download size={14}/>Download</Button></div>{isImage ? <div className="grid max-h-[60vh] place-items-center overflow-auto rounded-xl bg-slate-100 p-3"><img src={doc.dataUrl} alt={doc.name} className="max-h-[55vh] max-w-full object-contain"/></div> : isPdf ? <iframe title={doc.name} src={doc.dataUrl} className="h-[60vh] w-full rounded-xl border border-slate-200"/> : <div className="grid min-h-48 place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center"><div><FileText size={30} className="mx-auto text-emerald-700"/><p className="mt-2 text-sm font-semibold">{doc.name}</p><p className="mt-1 text-xs text-slate-500">Preview is not embedded for this mock record. Download its project record metadata or attach a local file under 1.7 MB.</p></div></div>}<div className="flex justify-end"><Button variant="secondary" onClick={onClose}>Close</Button></div></div></Modal>; }
