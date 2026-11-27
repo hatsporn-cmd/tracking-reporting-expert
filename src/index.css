@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root { font-family: "IBM Plex Sans Thai", Inter, "Noto Sans Thai", system-ui, sans-serif; font-synthesis: none; text-rendering: optimizeLegibility; font-feature-settings: "tnum"; }
+:root { font-size: 110%; font-family: "IBM Plex Sans Thai", Inter, "Noto Sans Thai", system-ui, sans-serif; font-synthesis: none; text-rendering: optimizeLegibility; font-feature-settings: "tnum"; }
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; min-width: 320px; height: 100%; margin: 0; }
 body { min-height: 100vh; }
