@@ -1,6 +1,6 @@
 import React, { cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import trexLogo from './assets/T-Rex Project YE.png';
+import trexLogo from './assets/T-REX Project YE.png';
 import { CHECKLIST } from './data/inspectionTasks.js';
 import BuildingModelViewer from './components/BuildingModelViewer.jsx';
 import RoomModelViewer3D from './components/RoomModelViewer3D.jsx';
